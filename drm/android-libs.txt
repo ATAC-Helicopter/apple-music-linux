@@ -3,7 +3,7 @@
 # fails FairPlay init with `library "X" not found`, and an extra one is dead weight. Checked by
 # scripts/build-installer.sh.
 #
-# Apple's libraries (EMBED_LIBS in the Makefile), minus the two stubbed ones:
+# Apple's libraries (the two stubbed ones are listed at the end):
 libandroidappmusic.so
 libCoreFP.so
 libCoreLSKD.so
