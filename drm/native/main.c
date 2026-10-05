@@ -1,6 +1,6 @@
 /*
  * main.c — Apple Music FairPlay 解密 wrapper 的 Android 层主程序
- * (运行在 rootfs chroot 内, 由 wrapper.c / wrapper-rootless.c 启动)
+ * (运行在 rootfs chroot 内, legacy: launched by wrapper.c / wrapper-rootless.c; now linked in-process)
  *
  * 架构:
  *   持有效 Apple Music 订阅的账户, 通过 Android 原生库
