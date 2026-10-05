@@ -176,6 +176,16 @@ patchelf --set-soname libicui18n_sv_apple.so  /tmp/libicui18n_sv_apple.so
 patchelf --replace-needed libicudata_sv_apple.so.68 libicudata_sv_apple.so /tmp/libicuuc_sv_apple.so
 patchelf --replace-needed libicudata_sv_apple.so.68 libicudata_sv_apple.so /tmp/libicui18n_sv_apple.so
 patchelf --replace-needed libicuuc_sv_apple.so.68   libicuuc_sv_apple.so  /tmp/libicui18n_sv_apple.so
+# The NDK-built libs import __register_atfork, which the Android libc used at
+# runtime does not export (it exports pthread_atfork).  pthread_atfork takes the
+# same first three arguments and ignores the fourth, so retarget the import in
+# .dynstr (same length, NUL padded) so the libs resolve against the real libc.
+for lib in libicuuc_sv_apple libicui18n_sv_apple; do
+    perl -0pi -e 's/__register_atfork\0/pthread_atfork\0\0\0\0/g' /tmp/${lib}.so
+    if nm -D --undefined-only /tmp/${lib}.so | grep -q __register_atfork; then
+        echo "ERROR: ${lib}.so still imports __register_atfork" >&2; exit 1
+    fi
+done
 # Copy to output volume
 for lib in libicudata_sv_apple libicuuc_sv_apple libicui18n_sv_apple; do
     cp /tmp/${lib}.so /output/${lib}.so
