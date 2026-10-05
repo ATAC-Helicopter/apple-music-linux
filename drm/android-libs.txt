@@ -1,0 +1,33 @@
+# The Android libraries the DRM client loads from rootfs/system/lib64 (one per line).
+# This is the complete set: the loader follows each library's DT_NEEDED entries, so a missing name
+# fails FairPlay init with `library "X" not found`, and an extra one is dead weight. Checked by
+# scripts/build-installer.sh.
+#
+# Apple's libraries (EMBED_LIBS in the Makefile), minus the two stubbed ones:
+libandroidappmusic.so
+libCoreFP.so
+libCoreLSKD.so
+libCoreADI.so
+libCoreFoundation.so
+libstoreservicescore.so
+libmedialibrarycore.so
+libmediaplatform.so
+libdaapkit.so
+libdispatch.so
+libBlocksRuntime.so
+libxml2.so
+libc++_shared.so
+libicudata_sv_apple.so
+libicuuc_sv_apple.so
+libicui18n_sv_apple.so
+# Basic Android system libraries those depend on (AOSP):
+libc.so
+libm.so
+libdl.so
+liblog.so
+libz.so
+libstdc++.so
+libcurl.so
+# Built from stubs/empty_stub.c by `make android-stubs` (not tracked in git):
+libandroid.so
+libOpenSLES.so
