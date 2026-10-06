@@ -2812,7 +2812,9 @@ app.on('before-quit', (e) => {
         session.fromPartition('persist:apple-music').flushStorageData();
         await session.fromPartition('persist:apple-music').cookies.flushStore().catch(() => {});
         await stopEngine();
-        app.quit();
+        // Storage and engine cleanup are complete. Web-player unload handlers
+        // must not veto explicit quit and leave a window with a stopped engine.
+        app.exit(0);
     }, 300);
 });
 
