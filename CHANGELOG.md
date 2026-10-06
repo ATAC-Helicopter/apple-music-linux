@@ -11,6 +11,7 @@ the project's Releases page.
 
 ### Fixed
 - Keep ALAC play/pause/skip controls available when MusicKit omits its CDN playback actions. Drive the existing transport slots from the native session, and restore web controls when leaving lossless playback.
+- Preserve the native queue/session for explicit Stop, stop polling before stopping VLC, and reload from zero on Play. Clear old seek recovery on stop/restart/queue changes so it cannot jump back to a previous seek target.
 - Serialize native pause/resume requests, discard old-track commands/status snapshots and prevent SDK retry callbacks from overriding manual pause. Queue rapid next/previous requests instead of dropping them while navigation is busy.
 - Prepare every queue replacement by detaching the previous VLC audio proxy; use the same complete track/queue synchronization for missing-event recovery. Bound MusicKit navigation promises and restart the current/first track without waiting for a no-op index change.
 - Preserve desktop mixer volume/mute across track changes and skips; remove repeated `pactl` overrides and stale slider reposts. Give the embedded VLC stream a stable Apple Music Linux identity, and reflect live mixer values in the player UI.

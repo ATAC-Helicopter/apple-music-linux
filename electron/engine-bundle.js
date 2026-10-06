@@ -802,6 +802,7 @@
   var _syncVLCControls = () => {
   };
   var _pendingVLCIntent = null;
+  var _vlcStopped = false;
   var _vlcTransport = createTransportController({
     scope: () => _sessionId,
     send: async (paused) => {
@@ -821,6 +822,17 @@
       console.warn("[AML VLC] transport:", error.message);
       if (_vlcTransport.revision === revision) _vlcTransport.reset();
     });
+  }
+  var _vlcSeekRevision = 0;
+  function _resetVLCSeekState() {
+    _vlcSeekRevision++;
+    clearTimeout(_vlcSeekTimer);
+    _vlcSeekTimer = null;
+    _vlcSeekFrozen = false;
+    _vlcSeekOffsetMs = 0;
+    _seekBurstLog = 0;
+    _vlcSeekTargetMs = 0;
+    _vlcPostSeek = false;
   }
   var _vlcPollGeneration = 0;
   var _vlcPollTimer = null;
@@ -999,6 +1011,7 @@
     mk.seekToTime = async function(seekSec) {
       const audio = getMKAudio();
       if (_vlcMode) {
+        const seekRevision = ++_vlcSeekRevision;
         _vlcPosMs = Math.round(seekSec * 1e3);
         _vlcSeekFrozen = true;
         console.log(`[AML VLC] seekToTime(${seekSec.toFixed(3)})  target=${_vlcPosMs}ms  debounce-reset`);
@@ -1023,12 +1036,14 @@
             });
             const rtt = (performance.now() - t0).toFixed(0);
             const seekData = await seekResp.json().catch(() => ({}));
+            if (seekRevision !== _vlcSeekRevision) return;
             actualStartMs = seekData.actualStartMs ?? seekTarget;
             console.log(`[AML VLC seek] \u25C4 RECV  target=${seekTarget}ms  engine.actualStart=${actualStartMs}ms  rtt=${rtt}ms`);
             _vlcPosMs = seekTarget;
           } catch (e) {
             console.warn(`[AML VLC seek] \u2717 ERROR`, e);
           }
+          if (seekRevision !== _vlcSeekRevision) return;
           _vlcSeekOffsetMs = 0;
           _vlcPrevState = null;
           _vlcSeekFrozen = false;
@@ -4763,6 +4778,7 @@
       if (delta !== null && delta < -5e3 && _seekBurstLog > 10 && _sessionId && !_vlcSeekFrozen) {
         _seekBurstLog = 0;
         const reloadMs = _vlcSeekTargetMs;
+        const seekRevision = _vlcSeekRevision;
         console.warn(`[AML VLC seek] rewind detected \u0394=${delta}ms \u2014 SeekReload fallback to ${reloadMs}ms`);
         _vlcSeekFrozen = true;
         _vlcPosMs = reloadMs;
@@ -4771,11 +4787,12 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionId: _sessionId, assetId: _currentAssetId, startMs: reloadMs })
         }).then(() => {
+          if (seekRevision !== _vlcSeekRevision) return;
           _vlcSeekFrozen = false;
           _seekBurstLog = 20;
           _vlcPrevState = null;
         }).catch(() => {
-          _vlcSeekFrozen = false;
+          if (seekRevision === _vlcSeekRevision) _vlcSeekFrozen = false;
         });
       }
     } else if (_vlcTickCount % 20 === 0) {
@@ -5505,6 +5522,7 @@
   }
   async function _setupVLCPath(mkAudio, sess, adamId, ctrl, t0) {
     _vlcTransport.reset(false);
+    _vlcStopped = false;
     _vlcMode = true;
     window._amlVlcMode = true;
     _syncVLCControls();
@@ -7164,8 +7182,24 @@
     setTimeout(_maybeAutoSync, 2e3);
     const _origMKPlay = mk.play.bind(mk);
     const _origMKPause = mk.pause.bind(mk);
-    mk.play = function() {
+    const _origMKStop = mk.stop?.bind(mk);
+    mk.play = async function() {
       if (_vlcMode) {
+        if (_vlcStopped) {
+          _resetVLCSeekState();
+          _vlcTransport.reset(false);
+          _vlcPosMs = 0;
+          _vlcLoading = true;
+          const response = await fetch(`${ENGINE}/api/v1/vlc/load`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: _sessionId, assetId: _currentAssetId, startMs: 0 }),
+            signal: AbortSignal.timeout(15e3)
+          });
+          if (!response.ok) throw new Error(`VLC restart after stop: HTTP ${response.status}`);
+          _vlcStopped = false;
+          startVLCPoll(getMKAudio());
+        }
         const result = _requestVLCTransport(false);
         getMKAudio()?.dispatchEvent(new Event("play"));
         getMKAudio()?.dispatchEvent(new Event("playing"));
@@ -7195,7 +7229,29 @@
       }
       return _origMKPause();
     };
+    mk.stop = async function() {
+      if (!_vlcMode) return _origMKStop?.();
+      await _requestVLCTransport(true);
+      _resetVLCSeekState();
+      stopVLCPoll();
+      const response = await fetch(`${ENGINE}/api/v1/vlc/stop`, {
+        method: "POST",
+        signal: AbortSignal.timeout(4e3)
+      });
+      if (!response.ok) {
+        startVLCPoll(getMKAudio());
+        throw new Error(`VLC stop: HTTP ${response.status}`);
+      }
+      _vlcStopped = true;
+      _vlcPosMs = 0;
+      _vlcLoading = false;
+      const audio = getMKAudio();
+      audio?.dispatchEvent(new Event("pause"));
+      audio?.dispatchEvent(new Event("timeupdate"));
+      sendMprisStatus("Stopped");
+    };
     function _prepareMusicKitTransition() {
+      _resetVLCSeekState();
       stopVLCPoll();
       const _gotoAudio = getMKAudio();
       if (_gotoAudio && _nativeSrcSet) {
@@ -7276,6 +7332,7 @@
     async function _amlGotoNow(ci, ii) {
       const targetId = _sessionContainers[ci]?.items[ii];
       if (targetId && targetId === extractItemId(mk.nowPlayingItem)) {
+        _resetVLCSeekState();
         if (_vlcMode && _sessionId) {
           _vlcTransport.reset(false);
           _vlcPaused = false;
@@ -7621,6 +7678,10 @@
           break;
         case "pause":
           mk.pause();
+          break;
+        case "stop":
+          mk.stop?.().catch(() => {
+          });
           break;
         case "playpause":
           mk.playbackState === window.MusicKit?.PlaybackStates?.playing ? mk.pause() : mk.play().catch(() => {
@@ -8192,7 +8253,7 @@
           }
           stopVLCPoll();
           unbridgeDuration();
-          const _vlcStopped = leaveLossless({
+          const _vlcStopped2 = leaveLossless({
             live: true,
             nextMode: "aac",
             stop: () => fetch(ENGINE + "/api/v1/vlc/stop", { method: "POST" })
@@ -8227,7 +8288,7 @@
           _allowCDNTransition = false;
           _pendingExternalClickCatalogId = null;
           _pendingExternalClickQueueIdx = -1;
-          return _vlcStopped.then(() => _origSQ.apply(mk, a));
+          return _vlcStopped2.then(() => _origSQ.apply(mk, a));
         };
         mk.changeToMediaAtIndex = (idx) => {
           console.log("[VLC-MK] mk.changeToMediaAtIndex(" + idx + ")");

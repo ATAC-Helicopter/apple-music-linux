@@ -114,3 +114,18 @@ test('old status replies after a skip cannot clear the new poll or update its po
     assert.equal(vm.runInContext('_vlcFetching',context),false);
     assert.deepEqual(positions,[20]);
 });
+
+test('restart clears the previous seek target instead of reloading its old position', () => {
+    const requests=[];
+    const context={_vlcSeekRevision:0,_vlcSeekTimer:1,_vlcSeekFrozen:false,
+        _vlcSeekOffsetMs:0,_seekBurstLog:20,_vlcSeekTargetMs:20000,_vlcPostSeek:true,
+        _vlcPosMs:20000,_vlcTickCount:0,_sessionId:'same',_currentAssetId:'track',
+        clearTimeout(){},console:{log(){},warn(){}},window:{},
+        fetch:(...args)=>{requests.push(args);return Promise.resolve({ok:true});},Event};
+    vm.createContext(context);
+    const a=src.indexOf('function _resetVLCSeekState()');const b=src.indexOf('let _vlcPollGeneration',a);
+    const c=src.indexOf('function _vlcUpdatePosition(');const d=src.indexOf('function _vlcRetryFrom(',c);
+    vm.runInContext(src.slice(a,b)+'\n'+src.slice(c,d),context);
+    context._resetVLCSeekState();context._vlcUpdatePosition(250,'playing',{dispatchEvent(){}});
+    assert.equal(requests.length,0);assert.equal(context._vlcPosMs,250);assert.equal(context._vlcSeekRevision,1);
+});
