@@ -58,7 +58,7 @@ function trackFallback() {
         _currentAssetId: null, _amlGotoTargetId:null, changes:0,
         console: {warn() {}}, clearTimeout() {},
         setTimeout(fn) {timers.push(fn);},
-        handleTrackChange: async () => {context.changes++;},
+        _onNowPlayingChange: async () => {context.changes++;},
     };
     vm.createContext(context);
     const start = src.indexOf('        // MusicKit can enter loading/playing');
@@ -88,6 +88,7 @@ test('old status replies after a skip cannot clear the new poll or update its po
     const requests = [], positions = [];
     const context = {
         ENGINE:'https://127.0.0.1:20025', _sessionId:'old', AbortSignal,
+        _vlcTransport:{revision:0,pending:false},
         console:{log(){}}, clearInterval(){},
         _vlcSyncVolume(){}, _vlcHandleLength(){},
         _vlcUpdatePosition(pos){positions.push(pos);}, _vlcHandleStateChange(){},

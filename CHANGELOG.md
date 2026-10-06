@@ -10,6 +10,9 @@ the project's Releases page.
 - Ship freshly built external renderer bundles on every installer build, preventing old upgrade leftovers from overriding the new code in app.asar.
 
 ### Fixed
+- Keep ALAC play/pause/skip controls available when MusicKit omits its CDN playback actions. Drive the existing transport slots from the native session, and restore web controls when leaving lossless playback.
+- Serialize native pause/resume requests, discard old-track commands/status snapshots and prevent SDK retry callbacks from overriding manual pause. Queue rapid next/previous requests instead of dropping them while navigation is busy.
+- Prepare every queue replacement by detaching the previous VLC audio proxy; use the same complete track/queue synchronization for missing-event recovery. Bound MusicKit navigation promises and restart the current/first track without waiting for a no-op index change.
 - Preserve desktop mixer volume/mute across track changes and skips; remove repeated `pactl` overrides and stale slider reposts. Give the embedded VLC stream a stable Apple Music Linux identity, and reflect live mixer values in the player UI.
 - Start a settled queued item when MusicKit enters loading/playing without delivering its track-change event, while letting normal events take precedence.
 - Recover premature EOF and VLC errors by reloading the audio source at the last position instead of seeking an ended player. Ignore recovery timers after a skip, bound status requests and keep polling through transient engine outages.
