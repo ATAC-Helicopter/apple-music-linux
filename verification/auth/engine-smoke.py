@@ -19,6 +19,7 @@ import urllib.request
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--session-directory', type=Path)
+parser.add_argument('--require-ready', action='store_true', help='require a restored authenticated FairPlay session')
 args = parser.parse_args()
 repo = Path(__file__).resolve().parents[2]
 resources = repo / 'electron/dist/linux-unpacked/resources'
@@ -53,6 +54,10 @@ with tempfile.TemporaryDirectory(prefix='aml-engine-smoke-') as temporary:
                 else:
                     raise RuntimeError('startup/restoration did not finish within 40 seconds')
                 assert status['backend']['selected'] == 'native'
+                if args.require_ready:
+                    assert state['authentication'] == 'logged_in', 'saved account did not restore'
+                    assert state['fairplay'] == 'ready', 'restored FairPlay is not ready'
+                    assert status.get('capabilities', {}).get('cbcs') is True
                 if not args.session_directory:
                     assert status['state']['authentication'] != 'logged_in'
                     assert not status.get('capabilities', {}).get('cbcs', False)

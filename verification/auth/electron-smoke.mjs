@@ -53,7 +53,9 @@ try {
       [...document.querySelectorAll('button')].find(b=>b.textContent==='Sign In…').click();
       document.querySelector('input[type=email]').value='test@example.invalid';
       document.querySelector('input[type=password]').value='synthetic-password';
-      [...document.querySelectorAll('button')].find(b=>b.textContent==='Sign In').click();`;
+      document.querySelector('input[type=email]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+      if (document.activeElement !== document.querySelector('input[type=password]')) throw new Error('Enter did not focus password');
+      document.querySelector('input[type=password]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));`;
     await win.webContents.executeJavaScript('window.amlBridge = {};');
     await win.webContents.executeJavaScript(code);
     const waitFor = async expression => {
@@ -64,10 +66,10 @@ try {
         throw new Error('timed out: '+expression);
     };
     await waitFor("!!document.querySelector('input[autocomplete=one-time-code]')");
-    await win.webContents.executeJavaScript("document.querySelector('input').value='123456'; [...document.querySelectorAll('button')].find(b=>b.textContent==='Submit').click();");
+    await win.webContents.executeJavaScript("document.querySelector('input').value='123456'; document.querySelector('input').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));");
     await waitFor('window.authComplete===true');
     assert.equal(await win.webContents.executeJavaScript('window.challengeURL'), 'https://127.0.0.1:20025/api/v1/drm/challenge');
-    console.log('PASS: real renderer sign-in displays 2FA, submits correct URL, and completes');
+    console.log('PASS: real renderer Enter focuses password, submits credentials and 2FA, and completes');
     win.destroy();
     app.exit(0);
 } catch (error) {

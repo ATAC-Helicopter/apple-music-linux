@@ -9967,6 +9967,14 @@ window.amlGetQueueInfo = function () {
             body.appendChild(emailInp); body.appendChild(passInp);
             body.appendChild(msgEl); body.appendChild(btnRow);
 
+            emailInp.autocomplete = 'username';
+            passInp.autocomplete = 'current-password';
+            emailInp.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); passInp.focus(); }
+            });
+            passInp.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); goBtn.click(); }
+            });
             cancelBtn.onclick = renderState;
             goBtn.onclick = async () => {
                 const email = emailInp.value.trim();
@@ -10033,6 +10041,9 @@ window.amlGetQueueInfo = function () {
             const submitBtn = makeBtn('Submit');
             submitBtn.style.cssText += 'margin-top:6px;';
             body.appendChild(note); body.appendChild(codeInp); body.appendChild(errEl); body.appendChild(submitBtn);
+            codeInp.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); submitBtn.click(); }
+            });
             submitBtn.onclick = async () => {
                 const reply = codeInp.value.trim();
                 if (!/^\d{6}$/.test(reply)) { errEl.textContent = 'Enter the 6-digit verification code.'; return; }
@@ -10610,6 +10621,11 @@ window.amlGetQueueInfo = function () {
                 const d = await fetchDRM().catch(() => null);
                 if (!d) return;
                 renderStatusRows(d).forEach((row, i) => applyStatusRow(valEls[i].el, row));
+                if (accountSignedIn(d) !== accountSignedIn(drm)) {
+                    clearInterval(poll);
+                    openSettings();
+                    return;
+                }
                 if (isResolved(d)) clearInterval(poll);
             }, 2000);
         }
@@ -11760,9 +11776,12 @@ window.amlGetQueueInfo = function () {
             dlg.addEventListener('animationend', () => dlg.classList.remove('aml-opening'), { once: true });
         }
 
-        // Consume the pre-loaded cache (resolves instantly if already warm)
-        // then immediately start re-warming for the next open.
-        const [drm, tools, prefs] = await (_settingsPreload ?? _warmSettingsCache());
+        // Account state must be current: a warmed snapshot can precede login
+        // or session restoration. Cache tools/preferences, never authorization.
+        const [drm, [, tools, prefs]] = await Promise.all([
+            fetchDRM().catch(() => ({ state: {}, capabilities: {}, backend: {} })),
+            _settingsPreload ?? _warmSettingsCache(),
+        ]);
         _warmSettingsCache(); // refresh in background while sections render
         if (myGen !== _settingsGen) { _restoreProxy(); return; }
 

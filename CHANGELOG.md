@@ -5,6 +5,16 @@ Changelog, and releases are numbered MAJOR.MINOR.PATCH (the early ones were publ
 pre-releases). Narrative release notes for 1.4.0 are in releases/v1.4.0.md; earlier ones are on
 the project's Releases page.
 
+## 1.4.2 - 2026-10-06 (local build; not published upstream)
+
+### Fixed
+- Fetch current DRM authorization whenever Settings opens instead of rendering an old preloaded account snapshot. Refresh the account section when background session restoration changes its sign-in state, so “Not signed in” cannot linger alongside FairPlay ready and Session valid.
+- Enter in the Apple ID field focuses the password; Enter in the password submits sign-in, and Enter in the verification field submits the six-digit code. Repeated submission remains blocked while a request is pending.
+
+### Validation
+- Live account login on 1.4.1 reached authenticated, FairPlay ready and Session valid. Two isolated native-engine restarts using a private copy of that saved session restored authenticated FairPlay and CBCS capability without credentials or another verification code.
+- Real Electron keyboard tests cover email-to-password focus, credential submission and verification-code submission. Playback and provider/passkey qualification remain open. Notes: `releases/v1.4.2.md`.
+
 ## 1.4.1 - 2026-10-06 (local build; not published upstream)
 
 ### Fixed

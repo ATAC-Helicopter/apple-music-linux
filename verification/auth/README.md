@@ -40,10 +40,16 @@ The updated app opened a visible Apple Music page with the existing web session 
 
 Build `e930717` was packaged and installed with the rebuilt `.run` installer. Before replacement, the running app shut down and the installation/configuration were copied to a private user backup. The installed build identifies itself as 1.4.1, opens a visible fully loaded player, retains the authorized web session, and loads the renderer bridge and engine bundle. Startup logs showed zero SIGSEGV, uncaught exception or unhandled rejection markers during the check. The diagnostic instance was closed and the app reopened normally. The credentials-handler regression, all native checks, Go suites, Node suites (67 passed, 2 skipped), real Electron popup/form smoke and two packaged-engine starts both with and without a copy of the affected DRM profile passed. No live DRM credential submission was automated.
 
+## Follow-up live login, persistence and keyboard verification
+
+The user completed login on installed 1.4.1. Its log reported successful native FairPlay initialization, and the live status API returned `authentication=logged_in`, `fairplay=ready`, `session=valid` and CBCS capability. The screenshot's “Not signed in” label came from the preloaded Settings snapshot while the engine-status rows polled current state. Settings now fetches current authorization on each open, and status polling refreshes the account section when sign-in changes.
+
+`python3 verification/auth/engine-smoke.py --require-ready --session-directory DIR`, using a private temporary copy of this successful session, passed two startup/shutdown cycles with authenticated FairPlay and CBCS capability and no submitted credentials or codes. This validates restored authentication; playback is still unqualified. Real Electron smoke passed Enter focus from email to password, password submission and 2FA submission.
+
 ## Account qualification still required
 
 1. Web email/password sign-in and trusted-device code complete inside the app.
-2. DRM sign-in requests and accepts the actual Apple 2FA code.
+2. Further account/2FA variants beyond the user-completed login.
 3. An incorrect code can be retried without a crash.
 4. Lossless playback works; close/reopen retains both sessions.
 5. Last.fm/ListenBrainz authorization succeeds with the intended account.
