@@ -248,3 +248,22 @@ coverage: clean all
 
 .PHONY: all android-stubs clean clean-objs release clean-icu install uninstall test test-https test-realworld test-all \
         analyze format-check format valgrind-test coverage probe gen-blobs build-icu
+
+# Authentication challenge retries and long passwords, without contacting Apple.
+.PHONY: test-auth
+test-auth:
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g tests/auth_credentials_test.c -o /tmp/aml-auth-credentials-test
+	/tmp/aml-auth-credentials-test
+	rm -f /tmp/aml-auth-credentials-test
+
+.PHONY: test-recovery
+test-recovery:
+	$(CXX) -std=c++17 -Wall -Wextra -Wno-unused-parameter -ffunction-sections -fdata-sections -Wl,--gc-sections -fsanitize=address,undefined -g tests/recovery_lifecycle_test.cpp -pthread -o /tmp/aml-recovery-lifecycle-test
+	/tmp/aml-recovery-lifecycle-test
+	rm -f /tmp/aml-recovery-lifecycle-test
+
+.PHONY: test-auth-transport
+test-auth-transport: $(TARGET)
+	$(CC) -std=c11 -Wall -Wextra -Werror tests/auth_transport_test.c -L. -ldrm_client -o /tmp/aml-auth-transport-test
+	LD_LIBRARY_PATH=. /tmp/aml-auth-transport-test
+	rm -f /tmp/aml-auth-transport-test

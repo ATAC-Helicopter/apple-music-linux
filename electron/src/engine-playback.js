@@ -19,6 +19,7 @@
 import { mp4ParseBoxes as _mp4ParseBoxes } from './engine/mp4parse.js';
 import { extractItemId as _extractItemId, isVideoType as _isVideoType, extractItemType as _extractItemType } from './engine/catalog.js';
 import { extractPalette as _extractPalette, paletteRoles as _paletteRoles, rgbToHsl as _rgbToHsl } from './engine/artpalette.js';
+import { accountSignedIn, authProgress, drmURL } from './engine/auth.js';
 import { playbackMode, leaveLossless } from './engine/handoff.js';
 
 if (window.__amlEngineInjected) throw new Error('[AML] double-injection guard');
@@ -9886,14 +9887,6 @@ window.amlGetQueueInfo = function () {
         return r.json();
     }
 
-    const checkDRMStatus = (status, msgEl, t, onDone, onChallenge) => {
-        const auth = status.state?.authentication;
-        const session = status.state?.session;
-        if (session === 'valid' || auth === 'logged_in' || status.state?.fairplay === 'ready' || status.capabilities?.cbcs === true) { clearInterval(t); onDone(); return; }
-        if (auth === 'challenging') { clearInterval(t); onChallenge(); return; }
-        if (auth === 'failed') { clearInterval(t); msgEl.textContent = status.message || 'Authentication failed.'; }
-    };
-
     // ── Engine Account section (self-contained, mutates its own body) ─────
     function buildAccountSection(drm, onRefresh) {
         const { wrap, body } = makeSection('Engine Account');
@@ -9916,9 +9909,14 @@ window.amlGetQueueInfo = function () {
         // 1. CBCS is explicitly available (most reliable), OR
         // 2. FairPlay is ready, OR
         // 3. Authentication is logged_in AND process is running
-        const isSignedIn = cbcsOk || fairplayOk || (authOk && processOk);
+        const isSignedIn = accountSignedIn(drm);
+
+        let pollTimer;
+        let pollGeneration = 0;
+        function stopPolling() { clearTimeout(pollTimer); pollGeneration++; }
 
         function renderState() {
+            stopPolling();
             body.innerHTML = '';
             const row = document.createElement('div');
             row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:11px 0;';
@@ -9954,6 +9952,7 @@ window.amlGetQueueInfo = function () {
         }
 
         function renderSignIn() {
+            stopPolling();
             body.innerHTML = '';
             const emailInp = makeInput('email', 'Apple ID (email)');
             const passInp  = makeInput('password', 'Password');
@@ -9984,28 +9983,51 @@ window.amlGetQueueInfo = function () {
                     msgEl.textContent = await r.text().catch(() => `HTTP ${r.status}`);
                     goBtn.disabled = false; goBtn.textContent = 'Sign In'; return;
                 }
+                passInp.value = '';
                 msgEl.textContent = 'Contacting Apple servers…';
                 pollForAuth(msgEl);
             };
         }
 
         function pollForAuth(msgEl) {
-            let n = 0;
-            const t = setInterval(async () => {
-                if (++n > 60) { clearInterval(t); msgEl.textContent = 'Timed out. Refresh to check status.'; return; }
+            stopPolling();
+            const generation = pollGeneration;
+            const deadline = Date.now() + 135_000;
+            const poll = async () => {
+                if (generation !== pollGeneration || !body.isConnected) return;
+                if (Date.now() > deadline) {
+                    msgEl.textContent = 'Sign-in timed out. Close and reopen Settings to retry.';
+                    return;
+                }
                 const status = await fetchDRM().catch(() => null);
-                if (!status) return;
-                checkDRMStatus(status, msgEl, t, onRefresh, renderChallenge);
-            }, 1000);
+                if (generation !== pollGeneration || !body.isConnected) return;
+                const progress = status ? authProgress(status) : 'pending';
+                if (progress === 'done') { stopPolling(); onRefresh(); return; }
+                if (progress === 'challenge') { stopPolling();
+                    if (status.challenge.type === 'credentials') renderSignIn();
+                    else renderChallenge(status.challenge);
+                    return;
+                }
+                if (progress === 'failed') {
+                    stopPolling();
+                    msgEl.textContent = status.message || 'Authentication failed. Close and reopen Settings to retry.';
+                    return;
+                }
+                pollTimer = setTimeout(poll, 1000);
+            };
+            pollTimer = setTimeout(poll, 250);
         }
 
-        function renderChallenge() {
+        function renderChallenge(challenge) {
+            stopPolling();
             body.innerHTML = '';
             const note = document.createElement('div');
             note.style.cssText = FF + 'font-size:13px;color:rgba(255,255,255,0.85);padding:10px 0 4px;';
-            note.textContent = 'Two-factor authentication — enter the code sent to your device.';
+            note.textContent = challenge?.description || 'Two-factor authentication — enter the code sent to your device.';
             const codeInp = makeInput('text', '6-digit code');
-            codeInp.maxLength = 8;
+            codeInp.maxLength = 6;
+            codeInp.inputMode = 'numeric';
+            codeInp.autocomplete = 'one-time-code';
             const errEl   = document.createElement('div');
             errEl.style.cssText = FF + 'font-size:11px;color:rgba(255,255,255,0.5);padding:4px 0;min-height:16px;';
             const submitBtn = makeBtn('Submit');
@@ -10013,9 +10035,9 @@ window.amlGetQueueInfo = function () {
             body.appendChild(note); body.appendChild(codeInp); body.appendChild(errEl); body.appendChild(submitBtn);
             submitBtn.onclick = async () => {
                 const reply = codeInp.value.trim();
-                if (!reply) return;
+                if (!/^\d{6}$/.test(reply)) { errEl.textContent = 'Enter the 6-digit verification code.'; return; }
                 submitBtn.disabled = true;
-                const r = await fetch(`${ENGINE}api/v1/drm/challenge`, {
+                const r = await fetch(drmURL(ENGINE, 'challenge'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ reply }),
@@ -10026,7 +10048,11 @@ window.amlGetQueueInfo = function () {
             };
         }
 
-        renderState();
+        if (drm?.challenge && drmState.authentication === 'challenging') {
+            if (drm.challenge.type === 'credentials') renderSignIn();
+            else renderChallenge(drm.challenge);
+        }
+        else renderState();
         return wrap;
     }
 

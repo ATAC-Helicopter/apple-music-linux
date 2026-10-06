@@ -65,6 +65,7 @@ unsigned long g_itun_adam_id = 0;
 
 /* Library-mode callbacks — set by drm_lib_init(), NULL in binary mode. */
 #include "drm_lib.h"
+#include "auth_credentials.h"
 drm_auth_cb_t  g_drm_auth_cb  = NULL;
 void          *g_drm_auth_ud  = NULL;
 drm_state_cb_t g_drm_state_cb = NULL;
@@ -256,43 +257,46 @@ static void credentialHandler(struct shared_ptr *credReqHandler,
             credReqHandler->obj)),
         need2FA ? "true" : "false");
 
-    int passLen = strlen(amPassword);
-
+    /* Build each response from the original password. Apple may challenge again
+     * after an incorrect code; appending into amPassword both accumulated stale
+     * codes and overflowed its fixed buffer. */
+    char code[16] = {0};
+    int code_ok = 1;
     if (need2FA) {
         write_drm_state("WAITING_2FA");
         if (g_drm_auth_cb) {
-            /* library mode: ask the Go engine for the 2FA code */
-            char code[16] = {0};
             g_drm_auth_cb("2fa", code, sizeof(code), g_drm_auth_ud);
-            strncat(amPassword, code, 6);
+            code[sizeof(code) - 1] = '\0';
         } else if (args_info.code_from_file_flag) {
-            fprintf(stderr, "[!] Enter your 2FA code into rootfs/%s/2fa.txt\n", args_info.base_dir_arg);
-            fprintf(stderr, "[!] Example command: echo -n 123456 > rootfs/%s/2fa.txt\n", args_info.base_dir_arg);
-            fprintf(stderr, "[!] Waiting for input...\n");
-            int count = 0;
-            while (1)
-            {
-                if (count >= 20) {
-                    fprintf(stderr, "[!] Failed to get 2FA Code in 60s. Exiting...\n");
-                    exit(0);
-                }
-                char *path = strcat_b(args_info.base_dir_arg, "/2fa.txt");
-                if (file_exists(path)) {
+            fprintf(stderr, "[!] Enter your 2FA code into %s/2fa.txt\n", args_info.base_dir_arg);
+            char *path = strcat_b(args_info.base_dir_arg, "/2fa.txt");
+            if (path) {
+                for (int count = 0; count < 20; ++count) {
                     FILE *fp = fopen(path, "r");
-                    fscanf(fp, "%6s", amPassword + passLen);
-                    remove(path);
-                    fprintf(stderr, "[!] Code file detected! Logging in...\n");
-                    break;
-                } else {
+                    if (fp) {
+                        if (fscanf(fp, "%15s", code) != 1) code[0] = '\0';
+                        fclose(fp);
+                        remove(path);
+                        break;
+                    }
                     sleep(3);
-                    count++;
                 }
+                free(path);
             }
         } else {
+#ifdef DRM_LIB_BUILD
+            /* An embedded GUI must never block on invisible stdin. */
+            fprintf(stderr, "[!] 2FA callback unavailable\n");
+#else
             printf("2FA code: ");
-            scanf("%6s", amPassword + passLen);
+            if (scanf("%15s", code) != 1) code[0] = '\0';
+#endif
         }
+        code_ok = drm_auth_valid_code(code);
+        if (!code_ok) write_drm_state("FAILED");
     }
+    char *response_password = code_ok
+        ? drm_auth_password(amPassword, need2FA ? code : NULL) : NULL;
 
     uint8_t *const ptr = malloc(80);
     memset(ptr + 8, 0, 16);
@@ -302,11 +306,12 @@ static void credentialHandler(struct shared_ptr *credReqHandler,
     struct shared_ptr credResp = {.obj = ptr + 24, .ctrl_blk = ptr};
     _ZN17storeservicescore19CredentialsResponseC1Ev(credResp.obj);
 
-    union std_string username = new_std_string(amUsername);
+    union std_string username = new_std_string(amUsername ? amUsername : "");
     _ZN17storeservicescore19CredentialsResponse11setUserNameERKNSt6__ndk112basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEE(
         credResp.obj, &username);
 
-    union std_string password = new_std_string(amPassword);
+    union std_string password = new_std_string(response_password ? response_password : "");
+    free(response_password);
     _ZN17storeservicescore19CredentialsResponse11setPasswordERKNSt6__ndk112basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEE(
         credResp.obj, &password);
 
@@ -457,12 +462,6 @@ extern int   get_recovery_state(void);
 
 uint8_t login(struct shared_ptr reqCtx) {
     fprintf(stderr, "[+] logging in...\n");
-    if (file_exists(strcat_b(args_info.base_dir_arg, "/STOREFRONT_ID"))) {
-        remove(strcat_b(args_info.base_dir_arg, "/STOREFRONT_ID"));
-    }
-    if (file_exists(strcat_b(args_info.base_dir_arg, "/MUSIC_TOKEN"))) {
-        remove(strcat_b(args_info.base_dir_arg, "/MUSIC_TOKEN"));
-    }
     struct shared_ptr flow;
     _ZNSt6__ndk110shared_ptrIN17storeservicescore16AuthenticateFlowEE11make_sharedIJRNS0_INS1_14RequestContextEEEEEES3_DpOT_(
         &flow, &reqCtx);
@@ -488,6 +487,13 @@ uint8_t login(struct shared_ptr reqCtx) {
         } else {
             fprintf(stderr, "[!] auth failed: response type %d\n", respType);
         }
+    }
+    /* Keep persisted tokens intact if a new login is rejected or cancelled. */
+    if (respType == 6) {
+        char *storefront_path = strcat_b(args_info.base_dir_arg, "/STOREFRONT_ID");
+        char *music_path = strcat_b(args_info.base_dir_arg, "/MUSIC_TOKEN");
+        if (storefront_path) { remove(storefront_path); free(storefront_path); }
+        if (music_path) { remove(music_path); free(music_path); }
     }
     return respType == 6;
     // struct shared_ptr subStatMgr;

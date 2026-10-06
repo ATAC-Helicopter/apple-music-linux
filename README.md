@@ -200,7 +200,13 @@ Sign in on first launch the same way you would at music.apple.com.
 This authenticates the FairPlay layer. Without it, playback falls back to AAC 256 kbps and music videos are unavailable.
 
 1. Click the **Settings** cog wheel next to your account button
-2. Click **Sign In**, enter your Apple ID, and wait about 20 seconds for the backend to authenticate and fetch the key
+2. Click **Sign In**, enter your Apple ID email and password.
+3. If Apple sends a verification code to your trusted device, enter the six-digit code in the **Engine Account** section and click **Submit**. Do not append the code to your password.
+4. Wait for authentication to complete (the attempt expires after two minutes). If Settings was closed during the challenge, reopen it to continue.
+
+The web login and DRM login are independent. DRM account files remain in your user configuration directory across app restarts and updates; a failed login attempt preserves existing session files. Apple can still revoke a session, in which case another sign-in is required.
+
+The web sign-in popup stays connected to the player. iPhone QR/passkey sign-in depends on Electron's platform authenticator support and is not qualified by this change; use Apple's email/password and trusted-device verification flow if that option fails.
 
 <div align="center">
   <img src="assets/screenshots/engine_login.png" alt="AML Settings — Engine Account login" width="49%"/>
@@ -218,16 +224,17 @@ cd apple-music-linux/electron
 bash build.sh
 ```
 
-`build.sh` installs npm dependencies, bundles system VLC libs into `dist/resources/vlc`, and launches the app.
+`build.sh` installs locked npm dependencies when needed, builds DRM, the Go engine and renderer bundles, bundles system VLC libs into `dist/resources/vlc`, and launches the app.
 
 **Dependencies:**
 
 ```bash
 # Arch
-sudo pacman -S vlc nodejs npm
+sudo pacman -S vlc nodejs npm go base-devel openssl curl git-lfs
 
 # Ubuntu/Debian
-sudo apt install vlc nodejs npm
+sudo apt install vlc libvlc-dev nodejs npm build-essential libssl-dev libcurl4-openssl-dev git-lfs
+# Install Go 1.26 or newer from https://go.dev/dl/
 ```
 
 **Rebuild the Go engine:**
