@@ -44,7 +44,7 @@ Build `e930717` was packaged and installed with the rebuilt `.run` installer. Be
 
 The user completed login on installed 1.4.1. Its log reported successful native FairPlay initialization, and the live status API returned `authentication=logged_in`, `fairplay=ready`, `session=valid` and CBCS capability. The screenshot's “Not signed in” label came from the preloaded Settings snapshot while the engine-status rows polled current state. Settings now fetches current authorization on each open, and status polling refreshes the account section when sign-in changes.
 
-`python3 verification/auth/engine-smoke.py --require-ready --session-directory DIR`, using a private temporary copy of this successful session, passed two startup/shutdown cycles with authenticated FairPlay and CBCS capability and no submitted credentials or codes. This validates restored authentication; playback is still unqualified. Real Electron smoke passed Enter focus from email to password, password submission and 2FA submission. The first installed 1.4.2 check showed Signed in/Sign Out on both Settings opens and restored logged-in/ready/valid native state. Explicit quit stopped its engine but left the Electron window alive. The quit pipeline now calls `app.exit(0)` after its existing storage flush and bounded engine shutdown, preventing web unload handlers from vetoing the final exit.
+`python3 verification/auth/engine-smoke.py --require-ready --session-directory DIR`, using a private temporary copy of this successful session, passed two startup/shutdown cycles with authenticated FairPlay and CBCS capability and no submitted credentials or codes. This validates restored authentication; playback was unqualified at that stage (see the subsequent consolidated audio report). Real Electron smoke passed Enter focus from email to password, password submission and 2FA submission. The first installed 1.4.2 check showed Signed in/Sign Out on both Settings opens and restored logged-in/ready/valid native state. Explicit quit stopped its engine but left the Electron window alive. The quit pipeline now calls `app.exit(0)` after its existing storage flush and bounded engine shutdown, preventing web unload handlers from vetoing the final exit.
 
 ## Final installed 1.4.2 verification
 
@@ -61,14 +61,8 @@ The rebuilt 1.4.2 installer (`3f9ca87`) was installed. Real installed Settings s
 
 Private Apple libraries do not expose a complete thread teardown API. Libraries now remain mapped while the app-owned recovery worker is stopped and callbacks cleared; repeated live Apple authentication remains part of account qualification.
 
-## Upstream PR draft
+## Consolidated 1.4.1 upstream review
 
-**Title:** Fix native DRM 2FA, account persistence, web auth popups and engine lifecycle
-
-Apple's verification challenges could never reach the GUI because the native callback bridge was disconnected. Even when entered, codes were posted to a malformed URL. Login retries modified and could overflow passwords, and shutdown left recovery workers using unloaded libraries. Web authentication also destroyed the original player by replacing its window with the popup URL.
-
-Connect the complete authentication callback path, preserve pending challenges and genuine account state, build immutable credential replies and retain native-owned inputs. Keep auth popups connected to their opener, limit storage permission exceptions to Apple pages, and coordinate engine startup/shutdown without killing unrelated processes or replacing the session flock inode. Development launch builds all required components.
-
-Validation: Node suites, all Go packages, DRM race/CGO callback tests, native sanitizer/transport tests, real Electron synthetic auth flow, packaged engine startup/restart and installer consistency checks. Live Apple/iPhone/provider account qualification is pending; this should remain a draft PR until those results are recorded.
+Intermediate 1.4.2 local builds above are historical verification steps; all changes are consolidated into 1.4.1. The final installed patch retains authenticated sessions and passes real ALAC playback, controlled interruption recovery, next-track mixer persistence and graceful engine shutdown. See [audio validation](../audio/README.md). Node checks on the final checkout: 74 passed, 3 skipped, no failures; Go package/race checks and real Electron form/quit smoke passed. The upstream PR is a draft because further account variants, provider authorization and naturally occurring long-session interruptions remain unqualified.
 
 Electron popup behavior reference: https://www.electronjs.org/docs/latest/api/window-open
