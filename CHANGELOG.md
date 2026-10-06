@@ -11,6 +11,7 @@ the project's Releases page.
 - Preserve desktop mixer volume/mute across track changes and skips; remove repeated `pactl` overrides and stale slider reposts. Give the embedded VLC stream a stable Apple Music Linux identity, and reflect live mixer values in the player UI.
 - Start a settled queued item when MusicKit enters loading/playing without delivering its track-change event, while letting normal events take precedence.
 - Recover premature EOF and VLC errors by reloading the audio source at the last position instead of seeking an ended player. Ignore recovery timers after a skip, bound status requests and keep polling through transient engine outages.
+- Close event streams on server shutdown so active Electron clients cannot keep the engine alive until forced termination.
 - Cancel server-owned cache downloads before joining VLC during shutdown; bound Chromium cookie flushing so a stalled player cannot hold explicit quit indefinitely.
 - Default to reduced decorative motion, with a Display toggle to restore animations after restart.
 - Use the configured background blur instead of a hard-coded full-screen 80px filter, and avoid warming ten unrelated tracks at startup during active playback.

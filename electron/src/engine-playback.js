@@ -547,6 +547,7 @@ async function _slInitForTrack(assetId) {
 }
 
 
+let _vlcPollGeneration = 0; // invalidates status replies after stop/skip
 let _vlcPollTimer  = null;  // setInterval handle
 let _vlcSeekTimer  = null;  // debounce: actual VLC seek fires after scrubbing stops
 let _vlcSeekFrozen    = false; // true during scrub → poll won't overwrite _vlcPosMs

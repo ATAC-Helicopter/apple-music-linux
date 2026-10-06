@@ -876,8 +876,6 @@ func (s *APIServer) Stop() {
 	if s.vlcPlayer != nil {
 		s.vlcPlayer.Close()
 	}
-	// Cancel the server lifetime context to stop background goroutines.
-	s.shutdownStop()
 	// Stop the export worker before shutting down playback.
 	if s.em != nil {
 		s.em.Stop()

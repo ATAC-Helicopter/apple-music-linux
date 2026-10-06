@@ -669,6 +669,7 @@
     } catch (_) {
     }
   }
+  var _vlcPollGeneration = 0;
   var _vlcPollTimer = null;
   var _vlcSeekTimer = null;
   var _vlcSeekFrozen = false;

@@ -49,3 +49,67 @@ test('a failed reload resumes status polling rather than leaving playback contro
     await r.timers.shift()();
     assert.equal(r.context.polls, 1);
 });
+
+function trackFallback() {
+    const timers = [];
+    const context = {
+        mk: {playbackState: 1, nowPlayingItem: {id: 'track-a'}},
+        PS: {loading:1, playing:2}, trackFallbackTimer:null,
+        _currentAssetId: null, _amlGotoTargetId:null, changes:0,
+        console: {warn() {}}, clearTimeout() {},
+        setTimeout(fn) {timers.push(fn);},
+        handleTrackChange: async () => {context.changes++;},
+    };
+    vm.createContext(context);
+    const start = src.indexOf('        // MusicKit can enter loading/playing');
+    const end = src.indexOf('        // Sync MPRIS status.', start);
+    vm.runInContext(src.slice(start, end), context);
+    return {context,timers};
+}
+test('a settled loading item starts when MusicKit omits its track-change event', () => {
+    const t = trackFallback();
+    t.timers[0]();
+    assert.equal(t.context.changes, 1);
+});
+test('a normal track-change event takes precedence over the delayed fallback', () => {
+    const t = trackFallback();
+    t.context._currentAssetId = 'track-a';
+    t.timers[0]();
+    assert.equal(t.context.changes, 0);
+});
+test('fallback ignores an old item while a different queue target is pending', () => {
+    const t = trackFallback();
+    t.context._amlGotoTargetId = 'track-b';
+    t.timers[0]();
+    assert.equal(t.context.changes, 0);
+});
+
+test('old status replies after a skip cannot clear the new poll or update its position', async () => {
+    const requests = [], positions = [];
+    const context = {
+        ENGINE:'https://127.0.0.1:20025', _sessionId:'old', AbortSignal,
+        console:{log(){}}, clearInterval(){},
+        _vlcSyncVolume(){}, _vlcHandleLength(){},
+        _vlcUpdatePosition(pos){positions.push(pos);}, _vlcHandleStateChange(){},
+        fetch:() => new Promise(resolve=>requests.push(resolve)),
+    };
+    vm.createContext(context);
+    const varsStart = src.indexOf('let _vlcPollGeneration');
+    const varsEnd = src.indexOf('\n', src.indexOf('let _vlcFetching', varsStart));
+    const stopStart = src.indexOf('function stopVLCPoll()');
+    const stopEnd = src.indexOf('\n}',stopStart)+2;
+    const tickStart = src.indexOf('async function _vlcPollTick(');
+    const tickEnd = src.indexOf('function startVLCPoll(',tickStart);
+    vm.runInContext(src.slice(varsStart,varsEnd)+'\n'+src.slice(stopStart,stopEnd)+'\n'+src.slice(tickStart,tickEnd),context);
+    const oldPoll = vm.runInContext('_vlcPollTick({}, "old")',context);
+    vm.runInContext('stopVLCPoll(); _sessionId="new"; _vlcFetching=false;',context);
+    const newPoll = vm.runInContext('_vlcPollTick({}, "new")',context);
+    requests[0]({ok:true,json:async()=>({posMs:10,state:'playing'})});
+    await oldPoll;
+    assert.equal(vm.runInContext('_vlcFetching',context),true);
+    assert.deepEqual(positions,[]);
+    requests[1]({ok:true,json:async()=>({posMs:20,state:'playing'})});
+    await newPoll;
+    assert.equal(vm.runInContext('_vlcFetching',context),false);
+    assert.deepEqual(positions,[20]);
+});

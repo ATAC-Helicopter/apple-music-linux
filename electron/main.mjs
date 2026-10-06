@@ -357,6 +357,7 @@ const engineLifecycle = createEngineLifecycle({
             env: { ...process.env, GODEBUG: 'netdns=go', ...vlcEnv, ...ffEnv },
         });
     },
+    killDelay: 3000, // allow normal VLC/native teardown before forced termination
     onOutput: data => console.log('[engine]', data.toString().trimEnd()),
     onStderr: data => {
         const line = data.toString().trimEnd();
