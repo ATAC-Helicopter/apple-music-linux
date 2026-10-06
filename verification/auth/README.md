@@ -6,6 +6,8 @@ The installed application's local log showed two `WAITING_2FA` transitions follo
 
 Source investigation found:
 
+- Follow-up installed-profile login rejected credentials with Apple error `957384` and generic FairPlay code `-1`. The earlier immutable-password change freed its buffer before the borrowed Android string reached `setPassword`. The new production-handler test reproduced a heap use-after-free under ASan before the fix and passed after release was moved beyond credentials submission. It covers a 1024-byte password and two successive verification replies. Live Apple login after this fix remains unqualified.
+
 - Both layers of the native authentication bridge omitted the GUI callback/data, so verification codes could not reach Apple's credentials handler.
 - The renderer posted verification codes to `https://127.0.0.1:20025api/v1/drm/challenge`.
 - Retried codes appended to the previous password and could overflow its fixed allocation; native paths/credentials also outlived caller-owned CGO buffers.
@@ -22,7 +24,7 @@ Source investigation found:
 - `go test ./...` in `engine`: all packages passed, including VLC tests with bundled libraries/plugins available.
 - `go test -race ./core/drm`: passed.
 - `go test -race -tags 'native_backend drm_testhelpers' ./core/drm`: passed. Includes a real Go → C → exported Go authentication callback, cancellation/truncation and native inflight lifecycle tests.
-- `make -C drm test-auth test-recovery test-auth-transport test-subscription test-music-token-request`: passed. Credentials, recovery, subscription bounds and long-token JSON tests use ASan/UBSan; transport tests link the actual DRM library.
+- `make -C drm test-auth test-recovery test-auth-transport test-subscription test-music-token-request test-credential-handler`: passed. Production credential-handler lifetime, credentials, recovery, subscription bounds and long-token JSON tests use ASan/UBSan; transport tests link the actual DRM library.
 - `electron --no-sandbox verification/auth/electron-smoke.mjs`: passed in Electron 43.1.0. Real popup keeps its opener/partition/player; real renderer displays 2FA, posts the correct endpoint and completes against synthetic API responses. No Apple credentials are used.
 - Packaged native engine: two isolated startups on port 20125, signed-out state, HTTP 409 for unrequested verification replies, graceful SIGTERM shutdown and restart all passed. Account data and Chromium profile were isolated.
 - `python3 verification/auth/engine-smoke.py --session-directory DIR`: restores only a temporary copy, checks failure/ready state, rejects unsolicited codes, and preserves the session lock across two graceful shutdowns.

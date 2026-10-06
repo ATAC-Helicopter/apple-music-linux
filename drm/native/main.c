@@ -313,7 +313,7 @@ static void credentialHandler(struct shared_ptr *credReqHandler,
         credResp.obj, &username);
 
     union std_string password = new_std_string(response_password ? response_password : "");
-    free(response_password);
+    /* new_std_string borrows this buffer; Apple must read it before release. */
     _ZN17storeservicescore19CredentialsResponse11setPasswordERKNSt6__ndk112basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEE(
         credResp.obj, &password);
 
@@ -322,6 +322,7 @@ static void credentialHandler(struct shared_ptr *credReqHandler,
 
     _ZN20androidstoreservices28AndroidPresentationInterface25handleCredentialsResponseERKNSt6__ndk110shared_ptrIN17storeservicescore19CredentialsResponseEEE(
         apInf.obj, &credResp);
+    free(response_password);
 }
 
 

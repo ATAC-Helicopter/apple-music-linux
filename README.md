@@ -204,6 +204,8 @@ This authenticates the FairPlay layer. Without it, playback falls back to AAC 25
 3. If Apple sends a verification code to your trusted device, enter the six-digit code in the **Engine Account** section and click **Submit**. Do not append the code to your password.
 4. Wait for authentication to complete (the attempt expires after two minutes). If Settings was closed during the challenge, reopen it to continue.
 
+Local version 1.4.1 fixes a native password lifetime error that could reject a correct password with `FairPlay authentication failed (code -1)`. After updating, retry **Engine Account → Sign In**; an earlier failed attempt is not proof that the password is wrong. Account files do not need to be deleted. See [1.4.1 release notes](releases/v1.4.1.md) and the [validation report](verification/auth/README.md).
+
 The web login and DRM login are independent. DRM account files remain in your user configuration directory across app restarts and updates; a failed login attempt preserves existing session files. Apple can still revoke a session, in which case another sign-in is required.
 
 The web sign-in popup stays connected to the player. iPhone QR/passkey sign-in depends on Electron's platform authenticator support and is not qualified by this change; use Apple's email/password and trusted-device verification flow if that option fails.

@@ -279,3 +279,11 @@ test-music-token-request:
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g tests/music_token_request_test.c native/cJSON.c -lm -o /tmp/aml-music-token-request-test
 	/tmp/aml-music-token-request-test
 	rm -f /tmp/aml-music-token-request-test
+
+# Call the production native handler with Android ABI stubs; catches borrowed
+# password buffers freed before Apple reads them, including repeated 2FA replies.
+.PHONY: test-credential-handler
+test-credential-handler:
+	$(CC) -D_GNU_SOURCE -DMyRelease -DDRM_LIB_BUILD -include sys/time.h -std=c11 -Wall -Wextra -Wno-unused-parameter -Wno-format -ffunction-sections -fdata-sections -Wl,--gc-sections -fsanitize=address,undefined -g tests/credential_handler_test.c -o /tmp/aml-credential-handler-test
+	/tmp/aml-credential-handler-test
+	rm -f /tmp/aml-credential-handler-test

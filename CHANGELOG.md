@@ -5,6 +5,20 @@ Changelog, and releases are numbered MAJOR.MINOR.PATCH (the early ones were publ
 pre-releases). Narrative release notes for 1.4.0 are in releases/v1.4.0.md; earlier ones are on
 the project's Releases page.
 
+## 1.4.1 - 2026-10-06 (local build; not published upstream)
+
+### Fixed
+- Keep the native password buffer alive until Apple's credentials response has been submitted. The Android string wrapper borrows the buffer: freeing it before `setPassword` could corrupt a correct password and lead to `FairPlay authentication failed (code -1)`. A production-handler regression test reproduces the original heap use-after-free under ASan and covers long passwords and repeated 2FA challenges.
+- Connect native verification callbacks to the Engine Account form, submit codes to the correct endpoint, preserve pending challenges, and construct each response from the original password. Failed authentication clears playback readiness while retaining session files.
+- Retain native-owned configuration/credentials, stop the recovery worker before shutdown, reject incomplete subscription vectors safely, and serialize complete escaped music-token requests instead of truncating them.
+- Preserve web sign-in popup openers and session partitions; handle trusted Last.fm provider popups and Apple storage-access requests.
+- Serialize engine startup/shutdown, handle detached terminal writes and spawn failures, and retain session locks without killing unrelated processes. Development launch builds its required components.
+
+### Documentation and validation
+- Document the separate web/DRM sessions, six-digit verification flow, persistence and remaining account qualification in README and `verification/auth/README.md`.
+- Native sanitizer tests, Go suites/race checks, Node tests, real Electron popup/form smoke checks and packaged-engine startup checks are recorded in the verification report.
+- Actual Apple DRM authentication, playback, provider sign-in and iPhone QR/passkeys require live qualification; automated checks do not establish their success. Release notes: `releases/v1.4.1.md`.
+
 ## 1.4.0 - 2026-10-06
 
 A major release: 304 commits across 689 files since 1.3.0. Grouped by area because of its
