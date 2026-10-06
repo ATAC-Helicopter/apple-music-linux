@@ -7,7 +7,7 @@ All local authentication, startup, keyboard, audio and responsiveness fixes are 
 - Each VLC play reapplied a captured volume, forced unmute, then ran three `pactl` commands eight times. The renderer also reposted a stale per-track slider value after each load. Remove those overrides; expose live VLC volume/mute to synchronize the renderer. Set stable LibVLC application metadata so the mixer shows Apple Music Linux rather than VLC.
 - Premature EOF recovery sent SetTime to an ended player. SetTime only runs once the player is already playing/paused; it never restarts an ended source. Reload the source at startMs, ignore a retry after a skip, handle VLC errors and bound status requests while continuing to poll through temporary outages.
 - Cache downloads used independent 10–15-minute contexts. Bind them to the server lifetime and cancel that lifetime before joining VLC input threads. Protect requests racing with a closed VLC player. Bound Chromium cookie flushing before the existing final app exit.
-- The full-screen artwork filter ignored the saved background blur and forced 80px. Honor the saved blur; active playback already warms its queue, so skip an unrelated ten-track startup warm and limit idle startup warming to three tracks.
+- Default Chromium prefers-reduced-motion reduces decorative artwork animation; users may disable the Display preference and restart to restore it. The full-screen artwork filter ignored the saved background blur and forced 80px. Honor the saved blur; active playback already warms its queue, so skip an unrelated ten-track startup warm and limit idle startup warming to three tracks.
 
 ## Measured checks
 
@@ -21,3 +21,5 @@ All local authentication, startup, keyboard, audio and responsiveness fixes are 
 Live long-session playback and naturally occurring network/lease interruptions still need qualification. Synthetic recovery tests establish corrected control flow, not successful recovery from every Apple/CDN failure. The host also runs Unity and Rider, so end-to-end resource comparisons must be interpreted accordingly. No account secrets or raw private profiling logs are committed.
 
 LibVLC identity uses the upstream [application metadata API](https://github.com/videolan/vlc/blob/master/include/vlc/libvlc.h).
+
+Motion preference uses Chromium's [reduced-motion switch](https://chromium.googlesource.com/chromium/src/+/HEAD/ui/gfx/switches.cc).

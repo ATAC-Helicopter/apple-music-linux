@@ -217,6 +217,8 @@ The web sign-in popup stays connected to the player. iPhone QR/passkey sign-in d
   <img src="assets/screenshots/Account_logged_in.png" alt="Account logged in" width="49%"/>
 </div>
 
+Version 1.4.1 reduces decorative animation by default. To restore animated artwork, turn off **Settings → Display → Reduce animations** and restart. Music-video playback remains available. The system mixer controls the app stream independently of track changes.
+
 ## Dev
 
 The Android runtime used by the DRM layer (`drm/rootfs/system/lib64`, `libhybris-core.so`) is stored with [Git LFS](https://git-lfs.com), so install it before cloning.

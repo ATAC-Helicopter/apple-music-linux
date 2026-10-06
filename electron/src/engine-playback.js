@@ -10714,6 +10714,10 @@ window.amlGetQueueInfo = function () {
         zoomR.appendChild(zoomSl); zoomR.appendChild(zoomVal);
         zoomR.appendChild(makeResetBtn('zoom', () => { zoomSl.value = 100; zoomVal.textContent = '100%'; window.amlBridge.setZoom(1); }));
         dBody.appendChild(makeRow('Zoom', zoomR, null, false));
+        const motionToggle = _amlIOSToggle(prefs.reduceMotion !== false,
+            v => window.amlBridge.setTweak('reduceMotion', v));
+        dBody.appendChild(makeRow('Reduce animations', motionToggle,
+            'Use still artwork and fewer transitions. Restart required.', false));
         const toggle = _amlIOSToggle(prefs.hideUpsell !== false,
             v => window.amlBridge.setTweak('hideUpsell', v));
         dBody.appendChild(makeRow('Hide upsell banners', toggle, null, false));

@@ -70,6 +70,8 @@ function _storeFlush() {
 }
 
 // ── Chromium flags ──────────────────────────────────────────────────────────
+// Prefer static decorative artwork; users can opt back into motion in Settings.
+if (loadPrefs().reduceMotion !== false) app.commandLine.appendSwitch('force-prefers-reduced-motion');
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
 app.commandLine.appendSwitch('enable-features',
     'UseOzonePlatform,WaylandWindowDecorations,' +

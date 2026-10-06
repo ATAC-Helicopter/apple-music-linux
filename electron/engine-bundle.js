@@ -9821,6 +9821,16 @@
         window.amlBridge.setZoom(1);
       }));
       dBody.appendChild(makeRow("Zoom", zoomR, null, false));
+      const motionToggle = _amlIOSToggle(
+        prefs.reduceMotion !== false,
+        (v) => window.amlBridge.setTweak("reduceMotion", v)
+      );
+      dBody.appendChild(makeRow(
+        "Reduce animations",
+        motionToggle,
+        "Use still artwork and fewer transitions. Restart required.",
+        false
+      ));
       const toggle = _amlIOSToggle(
         prefs.hideUpsell !== false,
         (v) => window.amlBridge.setTweak("hideUpsell", v)
