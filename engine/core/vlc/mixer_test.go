@@ -75,7 +75,7 @@ func TestSystemMixerVolumeAndMuteSurviveTrackChange(t *testing.T) {
 	}
 	time.Sleep(700 * time.Millisecond)
 	assertMixer()
-	if input.Properties["application.name"] != "Apple Music Linux" {
+	if input.Properties["application.name"] != "Apple Music Linux test" {
 		t.Fatalf("wrong mixer application name: %s", input.Properties["application.name"])
 	}
 }

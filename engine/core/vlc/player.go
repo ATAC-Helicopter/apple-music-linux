@@ -30,14 +30,18 @@ type Player struct {
 // New creates a libvlc instance and media player.
 // Returns an error if libvlc cannot be initialised (missing shared library).
 func New() (*Player, error) {
+	return newPlayer("Apple Music Linux", "io.github.apple_music_linux")
+}
+
+func newPlayer(applicationName, applicationID string) (*Player, error) {
 	inst := C.libvlc_new(0, nil)
 	if inst == nil {
 		return nil, fmt.Errorf("vlc: libvlc_new failed — is libvlc.so.5 in LD_LIBRARY_PATH?")
 	}
 	// Stable audio identity lets the desktop mixer retain its per-app settings.
-	name := C.CString("Apple Music Linux")
+	name := C.CString(applicationName)
 	agent := C.CString("AppleMusicLinux/1.4.1")
-	appID := C.CString("io.github.apple_music_linux")
+	appID := C.CString(applicationID)
 	version := C.CString("1.4.1")
 	icon := C.CString("apple-music-linux")
 	C.libvlc_set_user_agent(inst, name, agent)

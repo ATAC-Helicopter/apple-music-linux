@@ -11,7 +11,7 @@ All local authentication, startup, keyboard, audio and responsiveness fixes are 
 
 ## Measured checks
 
-- `AML_TEST_PULSE=1 go test ./core/vlc -run TestSystemMixer -count=1`: before the change the real owned mixer stream's mute was overwritten; after the change volume 37% and mute remained across source replacement and the stream name was Apple Music Linux. The test uses silent synthetic WAV data and targets only its own PID.
+- `AML_TEST_PULSE=1 go test ./core/vlc -run TestSystemMixer -count=1`: before the change the real owned mixer stream's mute was overwritten; after the change volume 37% and mute remained across source replacement and the isolated stream name matched its test metadata. The test uses silent synthetic WAV data, a separate test application identity (so desktop restore settings cannot affect the real app) and targets only its own PID. The installed app name is checked separately.
 - `AML_TEST_PULSE=1 go test -race ./core/vlc ./cmd`: passed, including callback read cancellation, media replacement, mixer persistence and closed-player request safety.
 - `go test ./...`: passed with the bundled VLC plugins/libraries available.
 - Renderer recovery tests cover mid-track EOF, delayed recovery after a skip, normal end and a failed reload. Node checks: 71 passed, 2 runtime-only checks skipped, no failures.

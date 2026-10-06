@@ -51,7 +51,7 @@ func silentWAV(seconds int) []byte {
 
 func newTestPlayer(t *testing.T) *Player {
 	t.Helper()
-	p, err := New()
+	p, err := newPlayer("Apple Music Linux test", "io.github.apple_music_linux.test")
 	if err != nil {
 		t.Skipf("libvlc unavailable: %v", err)
 	}
