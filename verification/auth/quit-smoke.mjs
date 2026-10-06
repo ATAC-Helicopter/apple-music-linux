@@ -17,12 +17,15 @@ app.whenReady().then(async () => {
     const start = src.indexOf("app.on('before-quit', (e) => {");
     const end = src.indexOf('// window-all-closed', start);
     const context = {
-        isQuitting: false, win: window, setTimeout,
+        isQuitting: false, win: window, setTimeout, clearTimeout,
         globalShortcut: { unregisterAll() {} },
         _storeFlushSync: () => steps.push('store'),
         session: { fromPartition: () => ({
             flushStorageData: () => steps.push('storage'),
-            cookies: { flushStore: async () => steps.push('cookies') },
+            cookies: { flushStore: async () => {
+                steps.push('cookies');
+                if (process.env.AML_TEST_STALLED_FLUSH === '1') await new Promise(() => {});
+            } },
         }) },
         stopEngine: async () => { await new Promise(r => setTimeout(r, 20)); steps.push('engine'); },
         app: {

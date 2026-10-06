@@ -2810,7 +2810,12 @@ app.on('before-quit', (e) => {
     setTimeout(async () => {
         _storeFlushSync();
         session.fromPartition('persist:apple-music').flushStorageData();
-        await session.fromPartition('persist:apple-music').cookies.flushStore().catch(() => {});
+        let flushDeadline;
+        await Promise.race([
+            session.fromPartition('persist:apple-music').cookies.flushStore().catch(() => {}),
+            new Promise(resolve => { flushDeadline = setTimeout(resolve, 2000); }),
+        ]);
+        clearTimeout(flushDeadline);
         await stopEngine();
         // Storage and engine cleanup are complete. Web-player unload handlers
         // must not veto explicit quit and leave a window with a stopped engine.

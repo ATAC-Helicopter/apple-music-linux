@@ -5,22 +5,15 @@ Changelog, and releases are numbered MAJOR.MINOR.PATCH (the early ones were publ
 pre-releases). Narrative release notes for 1.4.0 are in releases/v1.4.0.md; earlier ones are on
 the project's Releases page.
 
-## 1.4.2 - 2026-10-06 (local build; not published upstream)
+## 1.4.1 - Unreleased (local patch build, 2026-10-06)
 
 ### Fixed
-- Fetch current DRM authorization whenever Settings opens instead of rendering an old preloaded account snapshot. Refresh the account section when background session restoration changes its sign-in state, so “Not signed in” cannot linger alongside FairPlay ready and Session valid.
-- Enter in the Apple ID field focuses the password; Enter in the password submits sign-in, and Enter in the verification field submits the six-digit code. Repeated submission remains blocked while a request is pending.
-
-- Finish explicit app quit after storage flush and engine shutdown even if the web player vetoes window unload. This prevents a stopped-engine window from retaining the instance lock and blocking reopening.
-
-### Validation
-- Live account login on 1.4.1 reached authenticated, FairPlay ready and Session valid. Two isolated native-engine restarts using a private copy of that saved session restored authenticated FairPlay and CBCS capability without credentials or another verification code.
-- Installed 1.4.2 shows Signed in/Sign Out, completes explicit quit, and restores logged-in/ready/valid state after a normal app relaunch without credential submission.
-- Real Electron keyboard tests cover email-to-password focus, credential submission and verification-code submission. Playback and provider/passkey qualification remain open. Notes: `releases/v1.4.2.md`.
-
-## 1.4.1 - 2026-10-06 (local build; not published upstream)
-
-### Fixed
+- Preserve desktop mixer volume/mute across track changes and skips; remove repeated `pactl` overrides and stale slider reposts. Give the embedded VLC stream a stable Apple Music Linux identity, and reflect live mixer values in the player UI.
+- Recover premature EOF and VLC errors by reloading the audio source at the last position instead of seeking an ended player. Ignore recovery timers after a skip, bound status requests and keep polling through transient engine outages.
+- Cancel server-owned cache downloads before joining VLC during shutdown; bound Chromium cookie flushing so a stalled player cannot hold explicit quit indefinitely.
+- Use the configured background blur instead of a hard-coded full-screen 80px filter, and avoid warming ten unrelated tracks at startup during active playback.
+- Refresh DRM authorization on every Settings open and refresh the account section when restored authentication changes. Enter moves from email to password, submits credentials and submits verification codes.
+- Complete explicit app quit after storage flush and engine cleanup even if the web player vetoes unload.
 - Keep the native password buffer alive until Apple's credentials response has been submitted. The Android string wrapper borrows the buffer: freeing it before `setPassword` could corrupt a correct password and lead to `FairPlay authentication failed (code -1)`. A production-handler regression test reproduces the original heap use-after-free under ASan and covers long passwords and repeated 2FA challenges.
 - Connect native verification callbacks to the Engine Account form, submit codes to the correct endpoint, preserve pending challenges, and construct each response from the original password. Failed authentication clears playback readiness while retaining session files.
 - Retain native-owned configuration/credentials, stop the recovery worker before shutdown, reject incomplete subscription vectors safely, and serialize complete escaped music-token requests instead of truncating them.
@@ -30,7 +23,7 @@ the project's Releases page.
 ### Documentation and validation
 - Document the separate web/DRM sessions, six-digit verification flow, persistence and remaining account qualification in README and `verification/auth/README.md`.
 - Native sanitizer tests, Go suites/race checks, Node tests, real Electron popup/form smoke checks and packaged-engine startup checks are recorded in the verification report.
-- Actual Apple DRM authentication, playback, provider sign-in and iPhone QR/passkeys require live qualification; automated checks do not establish their success. Release notes: `releases/v1.4.1.md`.
+- User-completed DRM login and saved-session restoration were verified. Extended playback, provider sign-in and iPhone QR/passkeys still require qualification; automated checks do not establish their success. Release notes: `releases/v1.4.1.md`.
 
 ## 1.4.0 - 2026-10-06
 

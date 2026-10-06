@@ -6,7 +6,7 @@ The installed application's local log showed two `WAITING_2FA` transitions follo
 
 Source investigation found:
 
-- Follow-up installed-profile login rejected credentials with Apple error `957384` and generic FairPlay code `-1`. The earlier immutable-password change freed its buffer before the borrowed Android string reached `setPassword`. The new production-handler test reproduced a heap use-after-free under ASan before the fix and passed after release was moved beyond credentials submission. It covers a 1024-byte password and two successive verification replies. Live Apple login after this fix remains unqualified.
+- Follow-up installed-profile login rejected credentials with Apple error `957384` and generic FairPlay code `-1`. The earlier immutable-password change freed its buffer before the borrowed Android string reached `setPassword`. The new production-handler test reproduced a heap use-after-free under ASan before the fix and passed after release was moved beyond credentials submission. It covers a 1024-byte password and two successive verification replies. The user subsequently completed live login; see the follow-up evidence below.
 
 - Both layers of the native authentication bridge omitted the GUI callback/data, so verification codes could not reach Apple's credentials handler.
 - The renderer posted verification codes to `https://127.0.0.1:20025api/v1/drm/challenge`.
@@ -34,7 +34,7 @@ The validation host used Go 1.27.1 and build headers extracted to `/tmp` from di
 
 ## Installed profile validation
 
-The updated app opened a visible Apple Music page with the existing web session still authorized and renderer bridge/bundles loaded. This uncovered a separate native crash during eager restoration of the incomplete account database left by the previous failed login: `offline_available()` read the second entry of an empty subscription-status vector. Explicit bounds checks now reject this incomplete state, with a clear failed-authentication snapshot and preserved account files. Two native packaged-engine startups and graceful shutdowns using a private copy of the affected profile passed. The final installed build also opened a visible authorized web player, loaded the bridge/bundles, showed Settings with Sign In available, and ran one engine with zero SIGSEGV/uncaught exceptions during the check. The actual DRM login still requires user qualification.
+The updated app opened a visible Apple Music page with the existing web session still authorized and renderer bridge/bundles loaded. This uncovered a separate native crash during eager restoration of the incomplete account database left by the previous failed login: `offline_available()` read the second entry of an empty subscription-status vector. Explicit bounds checks now reject this incomplete state, with a clear failed-authentication snapshot and preserved account files. Two native packaged-engine startups and graceful shutdowns using a private copy of the affected profile passed. The final installed build also opened a visible authorized web player, loaded the bridge/bundles, showed Settings with Sign In available, and ran one engine with zero SIGSEGV/uncaught exceptions during the check. Subsequent live DRM login qualification is recorded below.
 
 ## Local 1.4.1 installation
 

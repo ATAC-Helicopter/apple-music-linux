@@ -206,7 +206,7 @@ This authenticates the FairPlay layer. Without it, playback falls back to AAC 25
 
 Local version 1.4.1 fixes a native password lifetime error that could reject a correct password with `FairPlay authentication failed (code -1)`. After updating, retry **Engine Account → Sign In**; an earlier failed attempt is not proof that the password is wrong. Account files do not need to be deleted. See [1.4.1 release notes](releases/v1.4.1.md) and the [validation report](verification/auth/README.md).
 
-Press **Enter** in Apple ID to move to the password, in the password to sign in, and in the verification field to submit the code. Local 1.4.2 refreshes account status on every Settings open so a cached “Not signed in” label does not hide a successfully restored session. Successful saved-session restoration has been checked across two native-engine restarts without re-entering credentials.
+Press **Enter** in Apple ID to move to the password, in the password to sign in, and in the verification field to submit the code. Local 1.4.1 refreshes account status on every Settings open so a cached “Not signed in” label does not hide a successfully restored session. Successful saved-session restoration has been checked across two native-engine restarts without re-entering credentials.
 
 The web login and DRM login are independent. DRM account files remain in your user configuration directory across app restarts and updates; a failed login attempt preserves existing session files. Apple can still revoke a session, in which case another sign-in is required.
 

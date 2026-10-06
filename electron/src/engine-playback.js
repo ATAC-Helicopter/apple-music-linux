@@ -299,6 +299,7 @@ const _origFnApply    = Function.prototype.apply;
 let _vlcMode       = false; // true when VLC is handling playback (MSE bypassed)
 let _vlcPosMs      = 0;     // last polled VLC position (frozen during seek)
 let _vlcPaused     = false; // virtual paused state (overrides audio.paused in VLC mode)
+let _vlcSyncVolume = null; // current track UI follows external mixer changes
 let _vlcVolPersist = 100;   // volume (0-200) persisted across track transitions
 let _amlTransitioning = false; // true during _amlGoto (set before setQueue, cleared after NPIDF)
 
@@ -1754,6 +1755,7 @@ async function mseSeekToTime(seekSec, audio, sb, ms) {
 // ── VLC poll ──────────────────────────────────────────────────────────────────
 
 function stopVLCPoll() {
+    _vlcPollGeneration++;
     if (_vlcPollTimer) { clearInterval(_vlcPollTimer); _vlcPollTimer = null; }
 }
 
@@ -5033,6 +5035,29 @@ function _vlcUpdatePosition(posMs, state, mkAudio) {
     }
 }
 
+function _vlcRetryFrom(posMs, mkAudio, delay) {
+    const sessionId = _sessionId;
+    const assetId = _currentAssetId;
+    setTimeout(async () => {
+        if (_sessionId !== sessionId || !_vlcMode) return;
+        try {
+            const response = await fetch(`${ENGINE}/api/v1/vlc/load`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId, assetId, startMs: posMs }),
+                signal: AbortSignal.timeout(15000),
+            });
+            if (!response.ok) throw new Error(`VLC reload: HTTP ${response.status}`);
+            if (_sessionId !== sessionId) return;
+            _vlcPosMs = posMs;
+            _vlcLoading = true;
+        } catch (error) {
+            if (_sessionId === sessionId) console.warn('[AML VLC] recovery failed:', error.message);
+        } finally {
+            if (_sessionId === sessionId && _vlcMode) startVLCPoll(mkAudio);
+        }
+    }, delay);
+}
+
 function _vlcHandleEnded(posMs, mkAudio) {
     stopVLCPoll();
     // Snap seek bar to 100% before advancing: VLC may end slightly
@@ -5047,35 +5072,18 @@ function _vlcHandleEnded(posMs, mkAudio) {
         _vlcRetryCount++;
         _vlcSeekOffsetMs = 0;
         console.log(`[AML VLC] premature end at posMs=${posMs} — reload attempt ${_vlcRetryCount}`);
-        setTimeout(() => {
-            if (!_sessionId) return;
-            fetch(`${ENGINE}/api/v1/vlc/load`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId: _sessionId, assetId: _currentAssetId, startMs: 0 }),
-            }).then(() => startVLCPoll(mkAudio)).catch(() => {});
-        }, 1500);
+        _vlcRetryFrom(0, mkAudio, 1500);
         return;
     }
     // False end: VLC hit EOF well before the expected track duration.
-    // Use vlc/seek (SetTime) to resume — avoids CDN re-download.
-    // The server will reload from disk cache if available, then SetTime.
+    // Reload the cached source and apply startMs after playback opens.
+    // SetTime alone cannot restart a player that has reached EOF.
     const trackEndMs = Math.round(_durationSec * 1000);
     if (posMs > 2000 && trackEndMs > 5000 && posMs < trackEndMs - 3000 && _vlcRetryCount < 2) {
         _vlcRetryCount++;
         const resumeMs = posMs;
-        console.warn(`[AML VLC] false end at ${posMs}ms (track=${trackEndMs}ms) — seeking to resume at ${resumeMs}ms attempt ${_vlcRetryCount}`);
-        setTimeout(() => {
-            if (!_sessionId) return;
-            fetch(`${ENGINE}/api/v1/vlc/seek`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ posMs: resumeMs, sessionId: _sessionId }),
-            }).then(() => {
-                _vlcPosMs = resumeMs;
-                startVLCPoll(mkAudio);
-            }).catch(() => {});
-        }, 500);
+        console.warn(`[AML VLC] false end at ${posMs}ms (track=${trackEndMs}ms) — reloading to resume at ${resumeMs}ms attempt ${_vlcRetryCount}`);
+        _vlcRetryFrom(resumeMs, mkAudio, 500);
         return;
     }
     if (_allowCDNTransition) {
@@ -5120,21 +5128,23 @@ function _vlcHandleStateChange(state, prev, posMs, mkAudio) {
     // VLC goes playing → ended → stopped in quick succession.
     // If the 250ms poll fires after the ended state has already passed,
     // we see playing → stopped and must treat it as a track end too.
-    if (state === 'ended' || (state === 'stopped' && (prev === 'playing' || prev === 'ended'))) {
-        _vlcHandleEnded(posMs, mkAudio);
+    if (state === 'error' || state === 'ended' || (state === 'stopped' && (prev === 'playing' || prev === 'ended'))) {
+        _vlcHandleEnded(Math.max(posMs, _vlcPosMs), mkAudio);
     }
 }
 
-async function _vlcPollTick(mkAudio, mySession) {
-    if (_vlcFetching) return;
+async function _vlcPollTick(mkAudio, mySession, generation = _vlcPollGeneration) {
+    if (_vlcFetching || generation !== _vlcPollGeneration) return;
     _vlcFetching = true;
     try {
-        const r = await fetch(`${ENGINE}/api/v1/vlc/time`);
+        const r = await fetch(`${ENGINE}/api/v1/vlc/time`, { signal: AbortSignal.timeout(4000) });
         // Stale check: if track changed while fetch was in-flight, discard silently
-        if (!r.ok || _sessionId !== mySession) return;
+        if (!r.ok) throw new Error(`VLC status: HTTP ${r.status}`);
+        if (_sessionId !== mySession || generation !== _vlcPollGeneration) return;
         _vlcErrCount = 0;
-        const { posMs, lengthMs, state } = await r.json();
-        if (_sessionId !== mySession) return; // second check after JSON parse
+        const { posMs, lengthMs, state, volume, muted } = await r.json();
+        if (_sessionId !== mySession || generation !== _vlcPollGeneration) return; // stale after JSON parse
+        _vlcSyncVolume?.(volume, muted);
         _vlcHandleLength(lengthMs, mkAudio);
         _vlcUpdatePosition(posMs, state, mkAudio);
         if (state === _vlcPrevState) return;
@@ -5147,10 +5157,12 @@ async function _vlcPollTick(mkAudio, mySession) {
         if (_vlcSeekFrozen) return;
         _vlcHandleStateChange(state, prev, posMs, mkAudio);
     } catch (_) {
-        // Stop polling after 5 consecutive errors (engine exited or unreachable).
-        if (++_vlcErrCount >= 5) stopVLCPoll();
+        if (_sessionId !== mySession || generation !== _vlcPollGeneration) return;
+        // Keep checking for engine recovery; a transient failure must not
+        // permanently stop status updates and strand the controls.
+        if (++_vlcErrCount === 5) mkAudio.dispatchEvent(new Event('waiting'));
     } finally {
-        _vlcFetching = false;
+        if (generation === _vlcPollGeneration) _vlcFetching = false;
     }
 }
 
@@ -5162,7 +5174,8 @@ function startVLCPoll(mkAudio) {
     _vlcLengthSet = false;
     _vlcFetching  = false;
     const mySession = _sessionId; // capture — discard responses that arrive after a track skip
-    _vlcPollTimer = setInterval(() => _vlcPollTick(mkAudio, mySession), T().poll);
+    const generation = _vlcPollGeneration;
+    _vlcPollTimer = setInterval(() => _vlcPollTick(mkAudio, mySession, generation), T().poll);
 }
 
 // Polls _engineCaps.lossless every 100 ms until true or timeoutMs elapses.
@@ -5527,6 +5540,7 @@ function _resetPlaybackState() {
     if (_seekFetchCtrl) { _seekFetchCtrl.abort(); _seekFetchCtrl = null; }
     // VLC state reset
     _vlcMode = false; window._amlVlcMode = false; _vlcPosMs = 0; _vlcPaused = false; _stopLyricsFreeze(); _vlcSeekFrozen = false; _vlcRetryCount = 0; _vlcSeekOffsetMs = 0; _vlcPrevState = null; _vlcLoading = false; _seekBurstLog = 0; _vlcPostSeek = false; _vlcWasPlaying = false; _vlcSeekTargetMs = 0;
+    _vlcSyncVolume = null;
     _scVlcReapply = null; // VLC volume closure is per-track; drop the stale reference
     _nextAlacTried = false; _nextAlacRetries = 0; _audioAnalysis = null;
     // Preserve _nextAacSession/_nextMvSession across reset (mirrors the
@@ -5862,6 +5876,15 @@ async function _setupVLCPath(mkAudio, sess, adamId, ctrl, t0) {
         try { mkAudio.dispatchEvent(new Event('volumechange')); }
         finally { _vlcVolSetting = false; }
     };
+    _vlcSyncVolume = (volume, muted) => {
+        if (!Number.isFinite(volume)) return;
+        const requested = Math.round(volume / (_scFactor || 1));
+        if (_vlcVolume === requested && _vlcMuted === muted) return;
+        _vlcVolume = requested;
+        _vlcVolPersist = requested;
+        _vlcMuted = !!muted;
+        _dispatchVolChange();
+    };
     Object.defineProperty(mkAudio, 'volume', {
         get: () => _vlcVolume / 100,
         set: (v) => {
@@ -5904,7 +5927,8 @@ async function _setupVLCPath(mkAudio, sess, adamId, ctrl, t0) {
     });
     if (!vlcResp.ok) throw new Error(`VLC load: ${await vlcResp.text()}`);
 
-    _postVlcVol(_vlcMuted ? 0 : _vlcVolume);
+    // The existing player/desktop mixer retains its level; do not repost a
+    // stale per-track volume over a change made in the system mixer.
 
     if (ctrl.signal.aborted) return;
 
@@ -9457,7 +9481,7 @@ setup().catch(e => console.error('[AML Engine] setup:', e));
             content: ''; position: absolute; inset: -8%;
             background-image: var(--aml-art-src, none);
             background-size: cover; background-position: center;
-            filter: blur(80px) saturate(1.6);
+            filter: blur(var(--aml-bg-blur, 18px)) saturate(1.6);
         }
         #_amlArtBlur::after {
             content: ''; position: absolute; inset: 0;

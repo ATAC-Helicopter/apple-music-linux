@@ -409,6 +409,7 @@
   var _vlcMode = false;
   var _vlcPosMs = 0;
   var _vlcPaused = false;
+  var _vlcSyncVolume = null;
   var _vlcVolPersist = 100;
   var _amlTransitioning = false;
   var _sessionContainers = [];
@@ -1648,6 +1649,7 @@
     await _mseNetworkSeek(sb, audio, ms, seekSec);
   }
   function stopVLCPoll() {
+    _vlcPollGeneration++;
     if (_vlcPollTimer) {
       clearInterval(_vlcPollTimer);
       _vlcPollTimer = null;
@@ -4627,6 +4629,29 @@
       console.log(`[AML VLC] pos=${posMs}ms state=${state}`);
     }
   }
+  function _vlcRetryFrom(posMs, mkAudio, delay) {
+    const sessionId = _sessionId;
+    const assetId = _currentAssetId;
+    setTimeout(async () => {
+      if (_sessionId !== sessionId || !_vlcMode) return;
+      try {
+        const response = await fetch(`${ENGINE}/api/v1/vlc/load`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, assetId, startMs: posMs }),
+          signal: AbortSignal.timeout(15e3)
+        });
+        if (!response.ok) throw new Error(`VLC reload: HTTP ${response.status}`);
+        if (_sessionId !== sessionId) return;
+        _vlcPosMs = posMs;
+        _vlcLoading = true;
+      } catch (error) {
+        if (_sessionId === sessionId) console.warn("[AML VLC] recovery failed:", error.message);
+      } finally {
+        if (_sessionId === sessionId && _vlcMode) startVLCPoll(mkAudio);
+      }
+    }, delay);
+  }
   function _vlcHandleEnded(posMs, mkAudio) {
     stopVLCPoll();
     if (posMs > 2e3) {
@@ -4637,34 +4662,15 @@
       _vlcRetryCount++;
       _vlcSeekOffsetMs = 0;
       console.log(`[AML VLC] premature end at posMs=${posMs} \u2014 reload attempt ${_vlcRetryCount}`);
-      setTimeout(() => {
-        if (!_sessionId) return;
-        fetch(`${ENGINE}/api/v1/vlc/load`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: _sessionId, assetId: _currentAssetId, startMs: 0 })
-        }).then(() => startVLCPoll(mkAudio)).catch(() => {
-        });
-      }, 1500);
+      _vlcRetryFrom(0, mkAudio, 1500);
       return;
     }
     const trackEndMs = Math.round(_durationSec * 1e3);
     if (posMs > 2e3 && trackEndMs > 5e3 && posMs < trackEndMs - 3e3 && _vlcRetryCount < 2) {
       _vlcRetryCount++;
       const resumeMs = posMs;
-      console.warn(`[AML VLC] false end at ${posMs}ms (track=${trackEndMs}ms) \u2014 seeking to resume at ${resumeMs}ms attempt ${_vlcRetryCount}`);
-      setTimeout(() => {
-        if (!_sessionId) return;
-        fetch(`${ENGINE}/api/v1/vlc/seek`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ posMs: resumeMs, sessionId: _sessionId })
-        }).then(() => {
-          _vlcPosMs = resumeMs;
-          startVLCPoll(mkAudio);
-        }).catch(() => {
-        });
-      }, 500);
+      console.warn(`[AML VLC] false end at ${posMs}ms (track=${trackEndMs}ms) \u2014 reloading to resume at ${resumeMs}ms attempt ${_vlcRetryCount}`);
+      _vlcRetryFrom(resumeMs, mkAudio, 500);
       return;
     }
     if (_allowCDNTransition) {
@@ -4692,19 +4698,21 @@
         _startLyricsFreeze(mkAudio);
       }
     }
-    if (state === "ended" || state === "stopped" && (prev === "playing" || prev === "ended")) {
-      _vlcHandleEnded(posMs, mkAudio);
+    if (state === "error" || state === "ended" || state === "stopped" && (prev === "playing" || prev === "ended")) {
+      _vlcHandleEnded(Math.max(posMs, _vlcPosMs), mkAudio);
     }
   }
-  async function _vlcPollTick(mkAudio, mySession) {
-    if (_vlcFetching) return;
+  async function _vlcPollTick(mkAudio, mySession, generation = _vlcPollGeneration) {
+    if (_vlcFetching || generation !== _vlcPollGeneration) return;
     _vlcFetching = true;
     try {
-      const r = await fetch(`${ENGINE}/api/v1/vlc/time`);
-      if (!r.ok || _sessionId !== mySession) return;
+      const r = await fetch(`${ENGINE}/api/v1/vlc/time`, { signal: AbortSignal.timeout(4e3) });
+      if (!r.ok) throw new Error(`VLC status: HTTP ${r.status}`);
+      if (_sessionId !== mySession || generation !== _vlcPollGeneration) return;
       _vlcErrCount = 0;
-      const { posMs, lengthMs, state } = await r.json();
-      if (_sessionId !== mySession) return;
+      const { posMs, lengthMs, state, volume, muted } = await r.json();
+      if (_sessionId !== mySession || generation !== _vlcPollGeneration) return;
+      _vlcSyncVolume?.(volume, muted);
       _vlcHandleLength(lengthMs, mkAudio);
       _vlcUpdatePosition(posMs, state, mkAudio);
       if (state === _vlcPrevState) return;
@@ -4714,9 +4722,10 @@
       if (_vlcSeekFrozen) return;
       _vlcHandleStateChange(state, prev, posMs, mkAudio);
     } catch (_) {
-      if (++_vlcErrCount >= 5) stopVLCPoll();
+      if (_sessionId !== mySession || generation !== _vlcPollGeneration) return;
+      if (++_vlcErrCount === 5) mkAudio.dispatchEvent(new Event("waiting"));
     } finally {
-      _vlcFetching = false;
+      if (generation === _vlcPollGeneration) _vlcFetching = false;
     }
   }
   function startVLCPoll(mkAudio) {
@@ -4727,7 +4736,8 @@
     _vlcLengthSet = false;
     _vlcFetching = false;
     const mySession = _sessionId;
-    _vlcPollTimer = setInterval(() => _vlcPollTick(mkAudio, mySession), T().poll);
+    const generation = _vlcPollGeneration;
+    _vlcPollTimer = setInterval(() => _vlcPollTick(mkAudio, mySession, generation), T().poll);
   }
   function waitForLossless(timeoutMs) {
     if (_streamingQuality === "high-quality") return Promise.resolve();
@@ -5082,6 +5092,7 @@
     _vlcPostSeek = false;
     _vlcWasPlaying = false;
     _vlcSeekTargetMs = 0;
+    _vlcSyncVolume = null;
     _scVlcReapply = null;
     _nextAlacTried = false;
     _nextAlacRetries = 0;
@@ -5383,6 +5394,15 @@
         _vlcVolSetting = false;
       }
     };
+    _vlcSyncVolume = (volume, muted) => {
+      if (!Number.isFinite(volume)) return;
+      const requested = Math.round(volume / (_scFactor || 1));
+      if (_vlcVolume === requested && _vlcMuted === muted) return;
+      _vlcVolume = requested;
+      _vlcVolPersist = requested;
+      _vlcMuted = !!muted;
+      _dispatchVolChange();
+    };
     Object.defineProperty(mkAudio, "volume", {
       get: () => _vlcVolume / 100,
       set: (v) => {
@@ -5429,7 +5449,6 @@
       signal: ctrl.signal
     });
     if (!vlcResp.ok) throw new Error(`VLC load: ${await vlcResp.text()}`);
-    _postVlcVol(_vlcMuted ? 0 : _vlcVolume);
     if (ctrl.signal.aborted) return;
     mkAudio.addEventListener("canplay", () => {
       if (!ctrl.signal.aborted) {
@@ -8435,7 +8454,7 @@
             content: ''; position: absolute; inset: -8%;
             background-image: var(--aml-art-src, none);
             background-size: cover; background-position: center;
-            filter: blur(80px) saturate(1.6);
+            filter: blur(var(--aml-bg-blur, 18px)) saturate(1.6);
         }
         #_amlArtBlur::after {
             content: ''; position: absolute; inset: 0;
