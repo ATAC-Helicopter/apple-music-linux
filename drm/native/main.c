@@ -66,6 +66,8 @@ unsigned long g_itun_adam_id = 0;
 /* Library-mode callbacks — set by drm_lib_init(), NULL in binary mode. */
 #include "drm_lib.h"
 #include "auth_credentials.h"
+#include "subscription_status.h"
+#include "music_token_request.h"
 drm_auth_cb_t  g_drm_auth_cb  = NULL;
 void          *g_drm_auth_ud  = NULL;
 drm_state_cb_t g_drm_state_cb = NULL;
@@ -1784,15 +1786,18 @@ static inline void *new_socket_account(void *args)
 }
 
 char* get_account_storefront_id(struct shared_ptr reqCtx) {
-    union std_string *region = malloc(sizeof(union std_string));
+    if (!reqCtx.obj) return NULL;
+    union std_string *region = calloc(1, sizeof(union std_string));
+    if (!region) return NULL;
     struct shared_ptr urlbag = {.obj = 0x0, .ctrl_blk = 0x0};
     _ZNK17storeservicescore14RequestContext20storeFrontIdentifierERKNSt6__ndk110shared_ptrINS_6URLBagEEE(region, reqCtx.obj, &urlbag);
     const char *region_str = std_string_data(region);
-    if (region_str) {
+    if (region_str && *region_str) {
         char *result = strdup(region_str); 
         free(region);
         return result;
-    } 
+    }
+    free(region);
     return NULL;
 }
 
@@ -1804,9 +1809,12 @@ void write_storefront_id(void) {
 }
 
 char *get_guid() {
-    char *ret[2];
+    if (!GUID.obj) return NULL;
+    char *ret[2] = {0};
     _ZN17storeservicescore10DeviceGUID4guidEv(ret, GUID.obj);
+    if (!ret[0]) return NULL;
     char *raw = _ZNK13mediaplatform4Data5bytesEv(ret[0]);
+    if (!raw) return NULL;
     size_t len = _ZNK13mediaplatform4Data6lengthEv(ret[0]);
     /* Data::bytes() is NOT null-terminated — copy to a null-terminated buffer */
     char *guid = malloc(len + 1);
@@ -1824,6 +1832,7 @@ long long getCurrentTimeMillis() {
 
 
 char *get_music_user_token(char *guid, char *authToken, struct shared_ptr reqCtx){
+    if (!guid || !*guid || !authToken || !*authToken || !reqCtx.obj) return NULL;
     uint8_t *ptr = (uint8_t *)calloc(1, 2048);
     if (!ptr) return NULL;
     *(void **)(ptr) =
@@ -1845,13 +1854,8 @@ char *get_music_user_token(char *guid, char *authToken, struct shared_ptr reqCtx
     union std_string bundleVersionHeader = new_std_string("X-Apple-Requesting-Bundle-Version");
     union std_string bundleVersionValue = new_std_string("Music/4.9 Android/10 model/Samsung S9 build/7663313 (dt:66)");
     _ZN13mediaplatform11HTTPMessage9setHeaderERKNSt6__ndk112basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_(httpMessage.obj, &bundleVersionHeader, &bundleVersionValue);
-    size_t body_size = 512;
-    char *body = (char *)malloc(body_size);
-    if (body == NULL) {
-        return "";
-    }
-
-    snprintf(body, body_size, "{\"guid\":\"%s\",\"assertion\":\"%s\",\"tcc-acceptance-date\":\"%lld\"}", guid, authToken, getCurrentTimeMillis());
+    char *body = drm_music_token_request(guid, authToken, getCurrentTimeMillis());
+    if (!body) return NULL;
     _ZN13mediaplatform11HTTPMessage11setBodyDataEPcm(httpMessage.obj, body, strlen(body));
     /* NOTE: do NOT free body before run() — new hybris stores pointer, not copy */
     uint8_t *urlRequest = (uint8_t *)calloc(1, 2048);
@@ -1859,18 +1863,23 @@ char *get_music_user_token(char *guid, char *authToken, struct shared_ptr reqCtx
     _ZN17storeservicescore10URLRequestC2ERKNSt6__ndk110shared_ptrIN13mediaplatform11HTTPMessageEEERKNS2_INS_14RequestContextEEE(urlRequest, &httpMessage, &reqCtx);
     _ZN17storeservicescore10URLRequest3runEv(urlRequest);
     struct shared_ptr *err = _ZNK17storeservicescore10URLRequest5errorEv(urlRequest);
-    if (err->obj != NULL) {
+    if (err && err->obj != NULL) {
         int code = _ZNK17storeservicescore19StoreErrorCondition9errorCodeEv(err->obj);
         const char *what = _ZNK17storeservicescore19StoreErrorCondition4whatEv(err->obj);
         fprintf(stderr, "[!] createMusicToken error: code=%d, message=%s\n", code, what ? what : "none");
         return NULL;
     }
     struct shared_ptr *urlResp = _ZNK17storeservicescore10URLRequest8responseEv(urlRequest);
+    if (!urlResp || !urlResp->obj) return NULL;
     struct shared_ptr *resp = _ZNK17storeservicescore11URLResponse18underlyingResponseEv(urlResp->obj);
+    if (!resp || !resp->obj) return NULL;
     void *http_message_obj = resp->obj;
     void* data_ptr = *(void**)((char*)http_message_obj + 48);
     char *respBody = data_ptr ? _ZNK13mediaplatform4Data5bytesEv(data_ptr) : NULL;
-    cJSON *json = cJSON_Parse(respBody);
+    if (!respBody) return NULL;
+    size_t response_len = _ZNK13mediaplatform4Data6lengthEv(data_ptr);
+    if (!response_len) return NULL;
+    cJSON *json = cJSON_ParseWithLength(respBody, response_len);
     cJSON *token_obj = cJSON_GetObjectItemCaseSensitive(json, "music_token");
     char *token = cJSON_GetStringValue(token_obj);
     if (token == NULL) {
@@ -1887,6 +1896,7 @@ char *get_music_user_token(char *guid, char *authToken, struct shared_ptr reqCtx
 
 
 char* get_dev_token(struct shared_ptr reqCtx) {
+    if (!reqCtx.obj) return NULL;
     uint8_t *ptr = (uint8_t *)calloc(1, 2048);
     if (!ptr) return NULL;
     *(void **)(ptr) =
@@ -1907,19 +1917,25 @@ char* get_dev_token(struct shared_ptr reqCtx) {
     _ZN17storeservicescore10URLRequest19setRequestParameterERKNSt6__ndk112basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_(urlRequest, &versionName, &versionValue);
     _ZN17storeservicescore10URLRequest3runEv(urlRequest);
     struct shared_ptr *err = _ZNK17storeservicescore10URLRequest5errorEv(urlRequest);
-    if (err->obj != NULL) {
+    if (err && err->obj != NULL) {
         int code = _ZNK17storeservicescore19StoreErrorCondition9errorCodeEv(err->obj);
         const char *what = _ZNK17storeservicescore19StoreErrorCondition4whatEv(err->obj);
         fprintf(stderr, "[!] devToken error: code=%d, message=%s\n", code, what ? what : "none");
         return NULL;
     }
     struct shared_ptr *urlResp = _ZNK17storeservicescore10URLRequest8responseEv(urlRequest);
+    if (!urlResp || !urlResp->obj) return NULL;
     struct shared_ptr *resp = _ZNK17storeservicescore11URLResponse18underlyingResponseEv(urlResp->obj);
+    if (!resp || !resp->obj) return NULL;
     void *http_message_obj = resp->obj;
     void** data_ptr_location = (void**)((char*)http_message_obj + 48);
     void* data_ptr = *data_ptr_location;
+    if (!data_ptr) return NULL;
     char *respBody = _ZNK13mediaplatform4Data5bytesEv(data_ptr);
-    cJSON *json = cJSON_Parse(respBody);
+    if (!respBody) return NULL;
+    size_t response_len = _ZNK13mediaplatform4Data6lengthEv(data_ptr);
+    if (!response_len) return NULL;
+    cJSON *json = cJSON_ParseWithLength(respBody, response_len);
     cJSON *token_obj = cJSON_GetObjectItemCaseSensitive(json, "token");
     char *token = cJSON_GetStringValue(token_obj);
     if (token == NULL) {
@@ -1957,19 +1973,13 @@ void write_music_token(void) {
 }
 
 int offline_available() {
-    struct shared_ptr *fairplay = malloc(16);
-    _ZN17storeservicescore14RequestContext8fairPlayEv(fairplay, reqCtx.obj);
-    /* Before the first login the request context has no FairPlay object; reading its
-     * subscription status dereferenced NULL and took the whole process down. */
-    if (!fairplay->obj) { free(fairplay); return 0; }
-    struct std_vector fairplay_status = _ZN17storeservicescore8FairPlay21getSubscriptionStatusEv(fairplay->obj);
-    char *begin_ptr = (char*)fairplay_status.begin;
-    char *second_item_ptr = begin_ptr + 16;
-    int state = *(int*)((char*)second_item_ptr + 8);
-    if (state == 2 || state == 3) { // kFPSubscriptionCanPlayContent, kFPSubscriptionCanStreamAndPlayContent
-        return 1;
-    } 
-    return 0;
+    if (!reqCtx.obj) return 0;
+    struct shared_ptr fairplay = {0};
+    _ZN17storeservicescore14RequestContext8fairPlayEv(&fairplay, reqCtx.obj);
+    if (!fairplay.obj) return 0;
+    struct std_vector status = _ZN17storeservicescore8FairPlay21getSubscriptionStatusEv(fairplay.obj);
+    return drm_subscription_offline_available(status.begin, status.end);
+
 }
 
 #ifndef DRM_LIB_BUILD

@@ -258,6 +258,15 @@ int drm_lib_init(const drm_lib_config_t *cfg)
     return 0;
 }
 
+/* C++ exceptions unwind through this C initializer without releasing pthread
+ * locks. The exception barrier calls this only when init threw on its thread. */
+void drm_lib_abort_init(void)
+{
+    g_init_result = -1;
+    pthread_mutex_unlock(&g_init_mutex);
+    if (g_drm_state_cb) g_drm_state_cb("FAILED", g_drm_state_ud);
+}
+
 /* ── drm_lib_shutdown ───────────────────────────────────────────────────────*/
 
 void drm_lib_shutdown(void)

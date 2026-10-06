@@ -256,6 +256,10 @@ func (m *DRMManager) ensureRunning(ctx context.Context) error {
 		// A concurrent ensureRunning / handleCrash goroutine may have started
 		// the backend between our Running() check and this call — that is fine.
 		if !m.backend.Running() {
+			m.mergeAndEmit(DRMSnapshot{
+				State:   DRMState{Manager: ManagerFailed, Process: ProcessFailed, Authentication: AuthFailed, FairPlay: FairPlayFailed, Session: SessionExpired},
+				Message: fmt.Sprintf("session restore failed: %v", err),
+			})
 			return err
 		}
 	}
@@ -538,7 +542,7 @@ func (m *DRMManager) handleCrash() {
 
 	if err := m.backend.Start(ctx, m.cfg); err != nil {
 		m.mergeAndEmit(DRMSnapshot{
-			State:   DRMState{Process: ProcessFailed},
+			State:   DRMState{Manager: ManagerFailed, Process: ProcessFailed, Authentication: AuthFailed, FairPlay: FairPlayFailed, Session: SessionExpired},
 			Message: fmt.Sprintf("restart failed: %v", err),
 		})
 		return

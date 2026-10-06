@@ -267,3 +267,15 @@ test-auth-transport: $(TARGET)
 	$(CC) -std=c11 -Wall -Wextra -Werror tests/auth_transport_test.c -L. -ldrm_client -o /tmp/aml-auth-transport-test
 	LD_LIBRARY_PATH=. /tmp/aml-auth-transport-test
 	rm -f /tmp/aml-auth-transport-test
+
+.PHONY: test-subscription
+test-subscription:
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g tests/subscription_status_test.c -o /tmp/aml-subscription-status-test
+	/tmp/aml-subscription-status-test
+	rm -f /tmp/aml-subscription-status-test
+
+.PHONY: test-music-token-request
+test-music-token-request:
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g tests/music_token_request_test.c native/cJSON.c -lm -o /tmp/aml-music-token-request-test
+	/tmp/aml-music-token-request-test
+	rm -f /tmp/aml-music-token-request-test

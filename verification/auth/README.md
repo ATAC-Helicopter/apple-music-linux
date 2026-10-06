@@ -10,6 +10,7 @@ Source investigation found:
 - The renderer posted verification codes to `https://127.0.0.1:20025api/v1/drm/challenge`.
 - Retried codes appended to the previous password and could overflow its fixed allocation; native paths/credentials also outlived caller-owned CGO buffers.
 - Transport initialization wrote invented account tokens and emitted `RUNNING` before Apple authentication. Unrelated state updates erased pending challenges; failed FairPlay retained playback capabilities.
+- A fixed 512-byte request body could truncate longer developer tokens and produce invalid authentication JSON. It now uses complete, escaped JSON serialization, tested with a 4096-byte token.
 - Detached recovery workers survived library shutdown. Mapped Android libraries and mutexes were destroyed despite background references.
 - Web sign-in popups navigated the original player, losing `window.opener`. Last.fm provider popups were not managed. Apple storage-access requests were denied unconditionally.
 - Engine startup killed arbitrary port/lock owners and unlinked the flock file. Spawn errors, overlapping starts, and restart timers during quit were not controlled.
@@ -21,12 +22,17 @@ Source investigation found:
 - `go test ./...` in `engine`: all packages passed, including VLC tests with bundled libraries/plugins available.
 - `go test -race ./core/drm`: passed.
 - `go test -race -tags 'native_backend drm_testhelpers' ./core/drm`: passed. Includes a real Go → C → exported Go authentication callback, cancellation/truncation and native inflight lifecycle tests.
-- `make -C drm test-auth test-recovery test-auth-transport`: passed. Credentials and recovery tests use ASan/UBSan; transport tests link the actual DRM library.
+- `make -C drm test-auth test-recovery test-auth-transport test-subscription test-music-token-request`: passed. Credentials, recovery, subscription bounds and long-token JSON tests use ASan/UBSan; transport tests link the actual DRM library.
 - `electron --no-sandbox verification/auth/electron-smoke.mjs`: passed in Electron 43.1.0. Real popup keeps its opener/partition/player; real renderer displays 2FA, posts the correct endpoint and completes against synthetic API responses. No Apple credentials are used.
 - Packaged native engine: two isolated startups on port 20125, signed-out state, HTTP 409 for unrequested verification replies, graceful SIGTERM shutdown and restart all passed. Account data and Chromium profile were isolated.
+- `python3 verification/auth/engine-smoke.py --session-directory DIR`: restores only a temporary copy, checks failure/ready state, rejects unsolicited codes, and preserves the session lock across two graceful shutdowns.
 - Native library, CGO engine, renderer bundles, Electron directory package and `.run` installer built successfully. Installer's bundled-file equality checks passed.
 
 The validation host used Go 1.27.1 and build headers extracted to `/tmp` from distribution packages. Production requirements remain those documented in README. No host-wide compiler packages were installed.
+
+## Installed profile validation
+
+The updated app opened a visible Apple Music page with the existing web session still authorized and renderer bridge/bundles loaded. This uncovered a separate native crash during eager restoration of the incomplete account database left by the previous failed login: `offline_available()` read the second entry of an empty subscription-status vector. Explicit bounds checks now reject this incomplete state, with a clear failed-authentication snapshot and preserved account files. Two native packaged-engine startups and graceful shutdowns using a private copy of the affected profile passed. The actual Apple login still requires user qualification.
 
 ## Account qualification still required
 
