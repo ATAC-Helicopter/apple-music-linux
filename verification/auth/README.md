@@ -36,6 +36,10 @@ The validation host used Go 1.27.1 and build headers extracted to `/tmp` from di
 
 The updated app opened a visible Apple Music page with the existing web session still authorized and renderer bridge/bundles loaded. This uncovered a separate native crash during eager restoration of the incomplete account database left by the previous failed login: `offline_available()` read the second entry of an empty subscription-status vector. Explicit bounds checks now reject this incomplete state, with a clear failed-authentication snapshot and preserved account files. Two native packaged-engine startups and graceful shutdowns using a private copy of the affected profile passed. The final installed build also opened a visible authorized web player, loaded the bridge/bundles, showed Settings with Sign In available, and ran one engine with zero SIGSEGV/uncaught exceptions during the check. The actual DRM login still requires user qualification.
 
+## Local 1.4.1 installation
+
+Build `e930717` was packaged and installed with the rebuilt `.run` installer. Before replacement, the running app shut down and the installation/configuration were copied to a private user backup. The installed build identifies itself as 1.4.1, opens a visible fully loaded player, retains the authorized web session, and loads the renderer bridge and engine bundle. Startup logs showed zero SIGSEGV, uncaught exception or unhandled rejection markers during the check. The diagnostic instance was closed and the app reopened normally. The credentials-handler regression, all native checks, Go suites, Node suites (67 passed, 2 skipped), real Electron popup/form smoke and two packaged-engine starts both with and without a copy of the affected DRM profile passed. No live DRM credential submission was automated.
+
 ## Account qualification still required
 
 1. Web email/password sign-in and trusted-device code complete inside the app.
