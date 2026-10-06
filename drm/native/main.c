@@ -1953,6 +1953,9 @@ void write_music_token(void) {
 int offline_available() {
     struct shared_ptr *fairplay = malloc(16);
     _ZN17storeservicescore14RequestContext8fairPlayEv(fairplay, reqCtx.obj);
+    /* Before the first login the request context has no FairPlay object; reading its
+     * subscription status dereferenced NULL and took the whole process down. */
+    if (!fairplay->obj) { free(fairplay); return 0; }
     struct std_vector fairplay_status = _ZN17storeservicescore8FairPlay21getSubscriptionStatusEv(fairplay->obj);
     char *begin_ptr = (char*)fairplay_status.begin;
     char *second_item_ptr = begin_ptr + 16;
