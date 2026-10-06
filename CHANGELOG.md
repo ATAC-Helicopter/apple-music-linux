@@ -9,6 +9,7 @@ the project's Releases page.
 
 ### Fixed
 - Preserve desktop mixer volume/mute across track changes and skips; remove repeated `pactl` overrides and stale slider reposts. Give the embedded VLC stream a stable Apple Music Linux identity, and reflect live mixer values in the player UI.
+- Start a settled queued item when MusicKit enters loading/playing without delivering its track-change event, while letting normal events take precedence.
 - Recover premature EOF and VLC errors by reloading the audio source at the last position instead of seeking an ended player. Ignore recovery timers after a skip, bound status requests and keep polling through transient engine outages.
 - Cancel server-owned cache downloads before joining VLC during shutdown; bound Chromium cookie flushing so a stalled player cannot hold explicit quit indefinitely.
 - Default to reduced decorative motion, with a Display toggle to restore animations after restart.

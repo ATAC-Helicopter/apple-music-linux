@@ -9206,9 +9206,26 @@ async function setup() {
         }
     });
 
+    let trackFallbackTimer;
     mk.addEventListener('playbackStateDidChange', () => {
         const PS = window.MusicKit?.PlaybackStates;
         console.log(`[AML Engine] state=${mk.playbackState} (playing=${PS?.playing})`);
+        // MusicKit can enter loading/playing without emitting NPIDF (e.g. a
+        // programmatic queue change while CDN playback is gated). Wait for the
+        // ordinary event first, then start only a still-unhandled settled item.
+        clearTimeout(trackFallbackTimer);
+        if (mk.playbackState === PS?.loading || mk.playbackState === PS?.playing) {
+            trackFallbackTimer = setTimeout(() => {
+                const item = mk.nowPlayingItem;
+                const id = item?.playParams?.catalogId ?? item?.attributes?.playParams?.catalogId ?? item?.id;
+                if (!id || String(id) === String(_currentAssetId)) return;
+                if (_amlGotoTargetId && String(id) !== String(_amlGotoTargetId)) return;
+                if (mk.playbackState !== PS?.loading && mk.playbackState !== PS?.playing) return;
+                console.warn('[AML Engine] recovering missing track-change event');
+                handleTrackChange(mk).catch(e => console.warn('[AML Engine] track recovery:', e.message));
+            }, 300);
+        }
+
 
         // Sync MPRIS status.
         const s = mk.playbackState;
