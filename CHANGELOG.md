@@ -10,6 +10,7 @@ the project's Releases page.
 - Ship freshly built external renderer bundles on every installer build, preventing old upgrade leftovers from overriding the new code in app.asar.
 
 ### Fixed
+- Advance once on normal VLC EOF within the final audio fragment instead of reloading/repeating the last few seconds. Keep recovery for early endings and explicit VLC errors; do not snap the seek bar to the end during recovery.
 - Keep ALAC play/pause/skip controls available when MusicKit omits its CDN playback actions. Drive the existing transport slots from the native session, and restore web controls when leaving lossless playback.
 - Preserve the native queue/session for explicit Stop, stop polling before stopping VLC, and reload from zero on Play. Clear old seek recovery on stop/restart/queue changes so it cannot jump back to a previous seek target.
 - Serialize native pause/resume requests, discard old-track commands/status snapshots and prevent SDK retry callbacks from overriding manual pause. Queue rapid next/previous requests instead of dropping them while navigation is busy.

@@ -5098,15 +5098,8 @@ function _vlcRetryFrom(posMs, mkAudio, delay) {
     }, delay);
 }
 
-function _vlcHandleEnded(posMs, mkAudio) {
+function _vlcHandleEnded(posMs, mkAudio, reason = 'ended') {
     stopVLCPoll();
-    // Snap seek bar to 100% before advancing: VLC may end slightly
-    // before the API-reported duration (CMAF duration padding adds
-    // metadata-only silence), leaving the bar showing "10s left".
-    if (posMs > 2000) {
-        _vlcPosMs = Math.round(_durationSec * 1000);
-        mkAudio.dispatchEvent(new Event('timeupdate'));
-    }
     // Premature end at posMs≈0: cbcs stream failed before delivering data.
     if (posMs < 2000 && _durationSec > 5 && _vlcRetryCount < 2) {
         _vlcRetryCount++;
@@ -5115,16 +5108,27 @@ function _vlcHandleEnded(posMs, mkAudio) {
         _vlcRetryFrom(0, mkAudio, 1500);
         return;
     }
-    // False end: VLC hit EOF well before the expected track duration.
+    // A decoded natural EOF can precede the reported duration by one final
+    // fragment/padding plus the last poll interval. It must advance, not replay
+    // that fragment twice. Keep error recovery stricter, and cap the natural
+    // window to 10% so short tracks do not lose a large portion on an early EOF.
     // Reload the cached source and apply startMs after playback opens.
     // SetTime alone cannot restart a player that has reached EOF.
     const trackEndMs = Math.round(_durationSec * 1000);
-    if (posMs > 2000 && trackEndMs > 5000 && posMs < trackEndMs - 3000 && _vlcRetryCount < 2) {
+    const endWindowMs = reason === 'error' ? 3000 : Math.min(10000, trackEndMs * 0.1);
+    if (posMs > 2000 && trackEndMs > 5000 && posMs < trackEndMs - endWindowMs && _vlcRetryCount < 2) {
         _vlcRetryCount++;
         const resumeMs = posMs;
         console.warn(`[AML VLC] false end at ${posMs}ms (track=${trackEndMs}ms) — reloading to resume at ${resumeMs}ms attempt ${_vlcRetryCount}`);
         _vlcRetryFrom(resumeMs, mkAudio, 500);
         return;
+    }
+    // Snap seek bar to 100% before advancing: VLC may end slightly
+    // before the API-reported duration (CMAF duration padding adds
+    // metadata-only silence), leaving the bar showing "10s left".
+    if (posMs > 2000) {
+        _vlcPosMs = Math.round(_durationSec * 1000);
+        mkAudio.dispatchEvent(new Event('timeupdate'));
     }
     if (_allowCDNTransition) {
         // CDN gate is open: user already clicked an external play button.
@@ -5162,7 +5166,7 @@ function _vlcHandleStateChange(state, prev, posMs, mkAudio) {
     // If the 250ms poll fires after the ended state has already passed,
     // we see playing → stopped and must treat it as a track end too.
     if (state === 'error' || state === 'ended' || (state === 'stopped' && (prev === 'playing' || prev === 'ended'))) {
-        _vlcHandleEnded(Math.max(posMs, _vlcPosMs), mkAudio);
+        _vlcHandleEnded(Math.max(posMs, _vlcPosMs), mkAudio, state);
     }
 }
 

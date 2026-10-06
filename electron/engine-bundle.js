@@ -4822,12 +4822,8 @@
       }
     }, delay);
   }
-  function _vlcHandleEnded(posMs, mkAudio) {
+  function _vlcHandleEnded(posMs, mkAudio, reason = "ended") {
     stopVLCPoll();
-    if (posMs > 2e3) {
-      _vlcPosMs = Math.round(_durationSec * 1e3);
-      mkAudio.dispatchEvent(new Event("timeupdate"));
-    }
     if (posMs < 2e3 && _durationSec > 5 && _vlcRetryCount < 2) {
       _vlcRetryCount++;
       _vlcSeekOffsetMs = 0;
@@ -4836,12 +4832,17 @@
       return;
     }
     const trackEndMs = Math.round(_durationSec * 1e3);
-    if (posMs > 2e3 && trackEndMs > 5e3 && posMs < trackEndMs - 3e3 && _vlcRetryCount < 2) {
+    const endWindowMs = reason === "error" ? 3e3 : Math.min(1e4, trackEndMs * 0.1);
+    if (posMs > 2e3 && trackEndMs > 5e3 && posMs < trackEndMs - endWindowMs && _vlcRetryCount < 2) {
       _vlcRetryCount++;
       const resumeMs = posMs;
       console.warn(`[AML VLC] false end at ${posMs}ms (track=${trackEndMs}ms) \u2014 reloading to resume at ${resumeMs}ms attempt ${_vlcRetryCount}`);
       _vlcRetryFrom(resumeMs, mkAudio, 500);
       return;
+    }
+    if (posMs > 2e3) {
+      _vlcPosMs = Math.round(_durationSec * 1e3);
+      mkAudio.dispatchEvent(new Event("timeupdate"));
     }
     if (_allowCDNTransition) {
       console.log("[AML VLC] ended \u2014 _amlNext suppressed (CDN gate open)");
@@ -4868,7 +4869,7 @@
     }
     _syncVLCControls();
     if (state === "error" || state === "ended" || state === "stopped" && (prev === "playing" || prev === "ended")) {
-      _vlcHandleEnded(Math.max(posMs, _vlcPosMs), mkAudio);
+      _vlcHandleEnded(Math.max(posMs, _vlcPosMs), mkAudio, state);
     }
   }
   async function _vlcPollTick(mkAudio, mySession, generation = _vlcPollGeneration) {

@@ -42,6 +42,36 @@ test('normal track end advances rather than reloading', () => {
     assert.equal(r.context.advances, 1);
     assert.equal(r.timers.length, 0);
 });
+test('normal EOF in the last fragment advances once without replaying the tail', () => {
+    for (const remainingMs of [3500, 5000, 7500, 10000]) {
+        const r = recovery();
+        r.context._vlcHandleEnded(200000 - remainingMs, r.audio);
+        assert.equal(r.context.advances, 1, `normal EOF with ${remainingMs}ms remaining`);
+        assert.equal(r.timers.length, 0);
+    }
+});
+test('a true VLC error near the end still recovers rather than skipping the tail', async () => {
+    const r = recovery();
+    r.context._vlcHandleEnded(195000, r.audio, 'error');
+    assert.equal(r.context.advances, 0);
+    await r.timers[0]();
+    assert.equal(r.requests[0].body.startMs, 195000);
+});
+test('an EOF outside the final window still recovers and does not snap the UI to the end', () => {
+    const r = recovery();
+    r.context._vlcPosMs = 189000;
+    r.context._vlcHandleEnded(189000, r.audio);
+    assert.equal(r.context.advances, 0);
+    assert.equal(r.timers.length, 1);
+    assert.equal(r.context._vlcPosMs, 189000);
+});
+test('short tracks have a proportionally smaller natural end window', () => {
+    const r = recovery();
+    r.context._durationSec = 20;
+    r.context._vlcHandleEnded(15000, r.audio);
+    assert.equal(r.context.advances, 0);
+    assert.equal(r.timers.length, 1);
+});
 test('a failed reload resumes status polling rather than leaving playback controls frozen', async () => {
     const r = recovery();
     r.context.fetch = async () => { throw new Error('temporary offline'); };
