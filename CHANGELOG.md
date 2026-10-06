@@ -7,6 +7,8 @@ the project's Releases page.
 
 ## 1.4.1 - Unreleased (local patch build, 2026-10-06)
 
+- Ship freshly built external renderer bundles on every installer build, preventing old upgrade leftovers from overriding the new code in app.asar.
+
 ### Fixed
 - Preserve desktop mixer volume/mute across track changes and skips; remove repeated `pactl` overrides and stale slider reposts. Give the embedded VLC stream a stable Apple Music Linux identity, and reflect live mixer values in the player UI.
 - Start a settled queued item when MusicKit enters loading/playing without delivering its track-change event, while letting normal events take precedence.
