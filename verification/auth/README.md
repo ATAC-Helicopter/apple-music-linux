@@ -46,6 +46,10 @@ The user completed login on installed 1.4.1. Its log reported successful native 
 
 `python3 verification/auth/engine-smoke.py --require-ready --session-directory DIR`, using a private temporary copy of this successful session, passed two startup/shutdown cycles with authenticated FairPlay and CBCS capability and no submitted credentials or codes. This validates restored authentication; playback is still unqualified. Real Electron smoke passed Enter focus from email to password, password submission and 2FA submission. The first installed 1.4.2 check showed Signed in/Sign Out on both Settings opens and restored logged-in/ready/valid native state. Explicit quit stopped its engine but left the Electron window alive. The quit pipeline now calls `app.exit(0)` after its existing storage flush and bounded engine shutdown, preventing web unload handlers from vetoing the final exit.
 
+## Final installed 1.4.2 verification
+
+The rebuilt 1.4.2 installer (`3f9ca87`) was installed. Real installed Settings showed Signed in and Sign Out with the web session still authorized; the native API restored logged-in/ready/valid state. SIGINT then completed the corrected explicit quit, and a normal relaunch without debugging restored that same authenticated state without credential submission. Startup fatal-error markers were zero. `quit-smoke.mjs` independently exercised the production quit handler in real Electron with a synthetic page that vetoes unload, verifying storage flush and engine cleanup before exit. Node checks finished with 67 passed, 2 skipped and no failures. The authenticated configuration has a private backup in the user's local backup directory.
+
 ## Account qualification still required
 
 1. Web email/password sign-in and trusted-device code complete inside the app.

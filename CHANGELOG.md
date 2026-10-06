@@ -15,6 +15,7 @@ the project's Releases page.
 
 ### Validation
 - Live account login on 1.4.1 reached authenticated, FairPlay ready and Session valid. Two isolated native-engine restarts using a private copy of that saved session restored authenticated FairPlay and CBCS capability without credentials or another verification code.
+- Installed 1.4.2 shows Signed in/Sign Out, completes explicit quit, and restores logged-in/ready/valid state after a normal app relaunch without credential submission.
 - Real Electron keyboard tests cover email-to-password focus, credential submission and verification-code submission. Playback and provider/passkey qualification remain open. Notes: `releases/v1.4.2.md`.
 
 ## 1.4.1 - 2026-10-06 (local build; not published upstream)
