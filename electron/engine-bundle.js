@@ -8921,6 +8921,22 @@
         body.appendChild(passInp);
         body.appendChild(msgEl);
         body.appendChild(btnRow);
+        emailInp.autocomplete = "username";
+        passInp.autocomplete = "current-password";
+        emailInp.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !e.isComposing) {
+            e.preventDefault();
+            e.stopPropagation();
+            passInp.focus();
+          }
+        });
+        passInp.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !e.isComposing) {
+            e.preventDefault();
+            e.stopPropagation();
+            goBtn.click();
+          }
+        });
         cancelBtn.onclick = renderState;
         goBtn.onclick = async () => {
           const email = emailInp.value.trim();
@@ -9006,6 +9022,13 @@
         body.appendChild(codeInp);
         body.appendChild(errEl);
         body.appendChild(submitBtn);
+        codeInp.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !e.isComposing) {
+            e.preventDefault();
+            e.stopPropagation();
+            submitBtn.click();
+          }
+        });
         submitBtn.onclick = async () => {
           const reply = codeInp.value.trim();
           if (!/^\d{6}$/.test(reply)) {
@@ -9659,6 +9682,11 @@
           const d = await fetchDRM().catch(() => null);
           if (!d) return;
           renderStatusRows(d).forEach((row, i) => applyStatusRow(valEls[i].el, row));
+          if (accountSignedIn(d) !== accountSignedIn(drm)) {
+            clearInterval(poll);
+            openSettings();
+            return;
+          }
           if (isResolved(d)) clearInterval(poll);
         }, 2e3);
       }
@@ -10923,7 +10951,10 @@
         dlg.showModal();
         dlg.addEventListener("animationend", () => dlg.classList.remove("aml-opening"), { once: true });
       }
-      const [drm, tools, prefs] = await (_settingsPreload ?? _warmSettingsCache());
+      const [drm, [, tools, prefs]] = await Promise.all([
+        fetchDRM().catch(() => ({ state: {}, capabilities: {}, backend: {} })),
+        _settingsPreload ?? _warmSettingsCache()
+      ]);
       _warmSettingsCache();
       if (myGen !== _settingsGen) {
         _restoreProxy();
